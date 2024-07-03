@@ -1,0 +1,22 @@
+[
+ {
+  "directory": "/trunk/branch/cpp/flatbuf/vhlogger/tests",
+  "arguments": [
+   "g++",
+   "-g",
+   "test_basic.cpp",
+   "-I/home/public/fmt/include",
+   "-L/home/public/fmt/lib64",
+   "-lfmt",
+   "-I/home/public/spdlog/include",
+   "-L/home/public/spdlog/lib64",
+   "-lspdlog",
+   "-pthread",
+   "-I../include",
+   "-std=c++17",
+   "-o",
+   "test_basic"
+  ],
+  "file": "test_basic.cpp"
+ }
+]

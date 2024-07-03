@@ -1,0 +1,31 @@
+[
+ {
+  "directory": "/trunk/branch/cpp/flatbuf/vhlogger",
+  "arguments": [
+   "g++",
+   "-g",
+   "./unittests/test_logger.cpp",
+   "-I./include",
+   "-I/home/public/zeromq/include",
+   "-L/home/public/zeromq/lib64",
+   "-lzmq",
+   "-I/home/public/toml11/include",
+   "-L/home/public/toml11/lib64",
+   "-ltoml11",
+   "-I/home/public/googletest/include",
+   "-L/home/public/googletest/lib64",
+   "-lgtest",
+   "-DTOML11_COMPILE_SOURCES",
+   "-I/home/public/fmt/include",
+   "-L/home/public/fmt/lib64",
+   "-lfmt",
+   "-I/home/public/spdlog/include",
+   "-L/home/public/spdlog/lib64",
+   "-lspdlog",
+   "-DSPDLOG_COMPILED_LIB",
+   "-o",
+   "exec"
+  ],
+  "file": "./src/vhlogger.cpp"
+ }
+]
