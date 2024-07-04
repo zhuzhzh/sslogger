@@ -1,97 +1,90 @@
-#ifndef VGP_VHLOGGER_HPP_
-#define VGP_VHLOGGER_HPP_
+// vhlogger.h
+#ifndef VGP_VHLOGGER_H_
+#define VGP_VHLOGGER_H_
 
 #include <fmt/format.h>
 #include <fmt/chrono.h>
+#include <atomic>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <string>
+#include <chrono>
 
 namespace vgp {
 
-enum class LogLevel {
-  DEBUG,
-  INFO,
-  WARN,
-  ERROR,
-  FATAL
-};
-
 class Logger {
  public:
-  enum class Format {
-    LITE,   // 只打印消息
-    MEDIUM, // 带时间的格式
-    FULL    // 默认格式（包含所有信息）
-  };
+  enum class Format { kLite, kMedium, kFull };
 
   static Logger& GetInstance();
 
   void SetFormat(Format format);
   void SetLogFile(const std::string& filename, bool append = false);
-  void SetLogLevel(LogLevel level);
 
   template <typename... Args>
-  void Log(LogLevel level, const char* file, int line, const char* format, Args&&... args);
+  void LogToConsole(int level, const char* file, int line, const char* format, Args&&... args);
 
   template <typename... Args>
-  void LogF(LogLevel level, const char* file, int line, const char* format, Args&&... args);
+  void LogToFile(int level, const char* file, int line, const char* format, Args&&... args);
 
  private:
-  Logger();
-  ~Logger();
+    Logger() : verbose_level_(0), format_(Format::kLite) {
+    const char* env_verbose = std::getenv("UV_HYBRID_VERBOSE");
+    if (env_verbose) {
+      verbose_level_ = std::atoi(env_verbose);
+    }
+  }
 
+  ~Logger() {
+    if (log_file_.is_open()) {
+      log_file_.close();
+    }
+  }
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
 
-  std::string FormatHeader(LogLevel level, const char* file, int line);
-  void WriteLog(const std::string& message);
+  std::string FormatMessage(int level, const char* file, int line, const std::string& message);
 
-  Format format_ = Format::FULL;
-  LogLevel log_level_ = LogLevel::INFO;
+  std::atomic<int> verbose_level_;
+  Format format_;
   std::mutex mutex_;
   std::ofstream log_file_;
 };
 
-#define LOG(level, ...) \
-  vgp::Logger::GetInstance().Log(vgp::LogLevel::level, __FILE__, __LINE__, __VA_ARGS__)
-
-#define LOGF(level, ...) \
-  vgp::Logger::GetInstance().LogF(vgp::LogLevel::level, __FILE__, __LINE__, __VA_ARGS__)
-
-#define LOG_DEBUG(...) LOG(DEBUG, __VA_ARGS__)
-#define LOG_INFO(...)  LOG(INFO, __VA_ARGS__)
-#define LOG_WARN(...)  LOG(WARN, __VA_ARGS__)
-#define LOG_ERROR(...) LOG(ERROR, __VA_ARGS__)
-#define LOG_FATAL(...) LOG(FATAL, __VA_ARGS__)
-
-#define LOGF_DEBUG(...) LOGF(DEBUG, __VA_ARGS__)
-#define LOGF_INFO(...)  LOGF(INFO, __VA_ARGS__)
-#define LOGF_WARN(...)  LOGF(WARN, __VA_ARGS__)
-#define LOGF_ERROR(...) LOGF(ERROR, __VA_ARGS__)
-#define LOGF_FATAL(...) LOGF(FATAL, __VA_ARGS__)
-
-
 template <typename... Args>
-void Logger::Log(LogLevel level, const char* file, int line, const char* format, Args&&... args) {
-  if (level >= log_level_) {
-    std::string header = FormatHeader(level, file, line);
+void Logger::LogToConsole(int level, const char* file, int line, const char* format, Args&&... args) {
+  if (level <= verbose_level_) {
+    std::lock_guard<std::mutex> lock(mutex_);
     std::string message = fmt::format(format, std::forward<Args>(args)...);
-    WriteLog(header + message);
+    std::string formatted_message = FormatMessage(level, file, line, message);
+    std::cout << formatted_message << std::endl;
   }
 }
 
 template <typename... Args>
-void Logger::LogF(LogLevel level, const char* file, int line, const char* format, Args&&... args) {
-  if (level >= log_level_) {
-    std::string header = FormatHeader(level, file, line);
+void Logger::LogToFile(int level, const char* file, int line, const char* format, Args&&... args) {
+  if (level <= verbose_level_) {
+    std::lock_guard<std::mutex> lock(mutex_);
     std::string message = fmt::format(format, std::forward<Args>(args)...);
-    WriteLog(header + message);
+    std::string formatted_message = FormatMessage(level, file, line, message);
+    
+    if (log_file_.is_open()) {
+      log_file_ << formatted_message << std::endl;
+    } else {
+      std::cout << formatted_message << std::endl;
+    }
   }
 }
 
 }  // namespace vgp
 
+#define LOG(level, ...) \
+  vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__)
 
-#endif  // VGP_VHLOGGER_HPP_
+#define LOGF(level, ...) \
+  vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__)
+
+
+#endif  // VGP_VHLOGGER_H_
