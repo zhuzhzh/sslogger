@@ -1,61 +1,74 @@
 #include "vhlogger/vhlogger.hpp"
-#include <mutex>
+#include <ctime>
+#include <cstdlib>
 
+namespace vgp {
 
 Logger& Logger::GetInstance() {
-    static std::once_flag flag;
-    std::call_once(flag, []() { instance_.reset(new Logger()); });
-    return *instance_;
+  static Logger instance;
+  return instance;
 }
 
-
-void Logger::SetLogLevel(int verbosity) {
-    spdlog::level::level_enum level;
-    if (verbosity <= 0) level = spdlog::level::off;
-    else if (verbosity >= 6) level = spdlog::level::trace;
-    else {
-        switch(verbosity) {
-            case 1: level = spdlog::level::critical; break;
-            case 2: level = spdlog::level::err; break;
-            case 3: level = spdlog::level::warn; break;
-            case 4: level = spdlog::level::info; break;
-            case 5: level = spdlog::level::debug; break;
-            default: level = spdlog::level::info; // 默认情况
-        }
-    }
-    
-    console_logger_->set_level(level);
-    if (file_logger_) file_logger_->set_level(level);
+Logger::Logger() {
+  const char* env_level = std::getenv("UV_HYBRID_VERBOSE");
+  if (env_level) {
+    int level = std::atoi(env_level);
+    log_level_ = static_cast<LogLevel>(level);
+  }
 }
 
-void Logger::SetLogFile(const std::string& filename, bool append) {
-    try {
-        file_logger_ = spdlog::basic_logger_mt("file_logger", filename, !append);
-        ApplyFormat(file_logger_);
-        file_logger_->set_level(console_logger_->level()); // 设置与控制台相同的日志级别
-    } catch (const spdlog::spdlog_ex& ex) {
-        std::cerr << "Log file initialization failed: " << ex.what() << std::endl;
-    }
+Logger::~Logger() {
+  if (log_file_.is_open()) {
+    log_file_.close();
+  }
 }
 
 void Logger::SetFormat(Format format) {
-    format_ = format;
-    ApplyFormat(console_logger_);
-    if (file_logger_) ApplyFormat(file_logger_);
+  format_ = format;
 }
 
-void Logger::ApplyFormat(std::shared_ptr<spdlog::logger>& logger) {
-    switch (format_) {
-        case Format::LITE:
-            logger->set_pattern("%v");
-            break;
-        case Format::MEDIUM:
-            logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] %v");
-            break;
-        case Format::FULL:
-            logger->set_pattern("%+");
-            break;
+void Logger::SetLogFile(const std::string& filename, bool append) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (log_file_.is_open()) {
+    log_file_.close();
+  }
+  log_file_.open(filename, append ? std::ios_base::app : std::ios_base::trunc);
+}
+
+void Logger::SetLogLevel(LogLevel level) {
+  log_level_ = level;
+}
+
+std::string Logger::FormatHeader(LogLevel level, const char* file, int line) {
+  std::string header;
+  
+  if (format_ == Format::FULL || format_ == Format::MEDIUM) {
+    auto now = std::chrono::system_clock::now();
+    header += fmt::format("[{:%Y-%m-%d %H:%M:%S}] ", now);
+  }
+
+  if (format_ == Format::FULL) {
+    const char* level_str;
+    switch (level) {
+      case LogLevel::DEBUG: level_str = "DEBUG"; break;
+      case LogLevel::INFO:  level_str = "INFO "; break;
+      case LogLevel::WARN:  level_str = "WARN "; break;
+      case LogLevel::ERROR: level_str = "ERROR"; break;
+      case LogLevel::FATAL: level_str = "FATAL"; break;
     }
+    header += fmt::format("[{}] [{}:{}] ", level_str, file, line);
+  }
+
+  return header;
 }
 
-std::unique_ptr<Logger> Logger::instance_;
+void Logger::WriteLog(const std::string& message) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (log_file_.is_open()) {
+    log_file_ << message << std::endl;
+  } else {
+    std::cout << message << std::endl;
+  }
+}
+
+}  // namespace vgp

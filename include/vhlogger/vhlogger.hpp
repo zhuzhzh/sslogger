@@ -1,77 +1,97 @@
-#ifndef VHLOGGER_HPP_H_
-#define VHLOGGER_HPP_H_
+#ifndef VGP_VHLOGGER_HPP_
+#define VGP_VHLOGGER_HPP_
 
-#define SPDLOG_FMT_EXTERNAL
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/sinks/basic_file_sink.h>
-#include <memory>
-#include <cstdlib>
+#include <fmt/format.h>
+#include <fmt/chrono.h>
+#include <fstream>
 #include <iostream>
 #include <mutex>
+#include <string>
 
-class Logger {
-public:
-    enum class Format {
-        LITE,
-        MEDIUM,
-        FULL
-    };
+namespace vgp {
 
-    static Logger& GetInstance();
-
-    void SetLogLevel(int verbosity);
-
-    void SetLogFile(const std::string& filename, bool append = true);
-
-    void SetFormat(Format format);
-
-    template<typename... Args>
-    void LogConsole(spdlog::level::level_enum level, spdlog::format_string_t<Args...> fmt, Args &&... args) {
-        console_logger_->log(level, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void LogFile(spdlog::level::level_enum level, spdlog::format_string_t<Args...> fmt, Args &&... args) {
-        if (file_logger_) {
-            file_logger_->log(level, fmt, std::forward<Args>(args)...);
-        } else {
-            std::cerr << "Attempted to write to file logger before it was initialized." << std::endl;
-        }
-    }
-
-
-private:
-    Logger() : format_(Format::LITE) {
-        const char* verbosity = std::getenv("UV_HYBRID_VERBOSITY");
-        int level = verbosity ? std::atoi(verbosity) : 4;  // 默认为 info 级别
-        
-        console_logger_ = spdlog::stdout_color_mt("console");
-        SetLogLevel(level);
-        ApplyFormat(console_logger_);
-    }
-
-    void ApplyFormat(std::shared_ptr<spdlog::logger>& logger);
-
-    static std::unique_ptr<Logger> instance_;
-    std::shared_ptr<spdlog::logger> console_logger_;
-    std::shared_ptr<spdlog::logger> file_logger_;
-    Format format_;
+enum class LogLevel {
+  DEBUG,
+  INFO,
+  WARN,
+  ERROR,
+  FATAL
 };
 
-// 使用宏来简化日志调用
-#define LOG_TRACE(...) Logger::GetInstance().LogConsole(spdlog::level::trace, __VA_ARGS__)
-#define LOG_DEBUG(...) Logger::GetInstance().LogConsole(spdlog::level::debug, __VA_ARGS__)
-#define LOG_INFO(...)  Logger::GetInstance().LogConsole(spdlog::level::info, __VA_ARGS__)
-#define LOG_WARN(...)  Logger::GetInstance().LogConsole(spdlog::level::warn, __VA_ARGS__)
-#define LOG_ERROR(...) Logger::GetInstance().LogConsole(spdlog::level::err, __VA_ARGS__)
-#define LOG_CRITICAL(...) Logger::GetInstance().LogConsole(spdlog::level::critical, __VA_ARGS__)
+class Logger {
+ public:
+  enum class Format {
+    LITE,   // 只打印消息
+    MEDIUM, // 带时间的格式
+    FULL    // 默认格式（包含所有信息）
+  };
 
-#define LOGF_TRACE(...) Logger::GetInstance().LogFile(spdlog::level::trace, __VA_ARGS__)
-#define LOGF_DEBUG(...) Logger::GetInstance().LogFile(spdlog::level::debug, __VA_ARGS__)
-#define LOGF_INFO(...)  Logger::GetInstance().LogFile(spdlog::level::info, __VA_ARGS__)
-#define LOGF_WARN(...)  Logger::GetInstance().LogFile(spdlog::level::warn, __VA_ARGS__)
-#define LOGF_ERROR(...) Logger::GetInstance().LogFile(spdlog::level::err, __VA_ARGS__)
-#define LOGF_CRITICAL(...) Logger::GetInstance().LogFile(spdlog::level::critical, __VA_ARGS__)
+  static Logger& GetInstance();
 
-#endif /* end of include guard: VHLOGGER_HPP_H_ */
+  void SetFormat(Format format);
+  void SetLogFile(const std::string& filename, bool append = false);
+  void SetLogLevel(LogLevel level);
+
+  template <typename... Args>
+  void Log(LogLevel level, const char* file, int line, const char* format, Args&&... args);
+
+  template <typename... Args>
+  void LogF(LogLevel level, const char* file, int line, const char* format, Args&&... args);
+
+ private:
+  Logger();
+  ~Logger();
+
+  Logger(const Logger&) = delete;
+  Logger& operator=(const Logger&) = delete;
+
+  std::string FormatHeader(LogLevel level, const char* file, int line);
+  void WriteLog(const std::string& message);
+
+  Format format_ = Format::FULL;
+  LogLevel log_level_ = LogLevel::INFO;
+  std::mutex mutex_;
+  std::ofstream log_file_;
+};
+
+#define LOG(level, ...) \
+  vgp::Logger::GetInstance().Log(vgp::LogLevel::level, __FILE__, __LINE__, __VA_ARGS__)
+
+#define LOGF(level, ...) \
+  vgp::Logger::GetInstance().LogF(vgp::LogLevel::level, __FILE__, __LINE__, __VA_ARGS__)
+
+#define LOG_DEBUG(...) LOG(DEBUG, __VA_ARGS__)
+#define LOG_INFO(...)  LOG(INFO, __VA_ARGS__)
+#define LOG_WARN(...)  LOG(WARN, __VA_ARGS__)
+#define LOG_ERROR(...) LOG(ERROR, __VA_ARGS__)
+#define LOG_FATAL(...) LOG(FATAL, __VA_ARGS__)
+
+#define LOGF_DEBUG(...) LOGF(DEBUG, __VA_ARGS__)
+#define LOGF_INFO(...)  LOGF(INFO, __VA_ARGS__)
+#define LOGF_WARN(...)  LOGF(WARN, __VA_ARGS__)
+#define LOGF_ERROR(...) LOGF(ERROR, __VA_ARGS__)
+#define LOGF_FATAL(...) LOGF(FATAL, __VA_ARGS__)
+
+
+template <typename... Args>
+void Logger::Log(LogLevel level, const char* file, int line, const char* format, Args&&... args) {
+  if (level >= log_level_) {
+    std::string header = FormatHeader(level, file, line);
+    std::string message = fmt::format(format, std::forward<Args>(args)...);
+    WriteLog(header + message);
+  }
+}
+
+template <typename... Args>
+void Logger::LogF(LogLevel level, const char* file, int line, const char* format, Args&&... args) {
+  if (level >= log_level_) {
+    std::string header = FormatHeader(level, file, line);
+    std::string message = fmt::format(format, std::forward<Args>(args)...);
+    WriteLog(header + message);
+  }
+}
+
+}  // namespace vgp
+
+
+#endif  // VGP_VHLOGGER_HPP_
