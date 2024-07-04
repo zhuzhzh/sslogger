@@ -3,8 +3,8 @@ EXEC = exec
 OBJ = test_basic
 LEVEL = 5
 
-LOGGER_HEADER = ../include/vhlogger/vhlogger.hpp
-LOGGER_SRCS = ../src/vhlogger.cpp
+LOGGER_HEADER = ../include/vhlogger/vhlogger.h
+LOGGER_SRCS = ../src/vhlogger.cc
 SRCS = test_basic.cpp ${LOGGER_SRCS}
 
 ZMQ_OPTS = -I${ZEROMQ_HOME}/include -L${ZEROMQ_HOME}/lib64 -lzmq 

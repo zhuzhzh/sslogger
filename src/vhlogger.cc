@@ -1,4 +1,4 @@
-#include "vhlogger/vhlogger.hpp"
+#include "vhlogger/vhlogger.h"
 
 namespace vgp {
 
