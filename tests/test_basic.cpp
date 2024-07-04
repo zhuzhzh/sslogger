@@ -2,9 +2,45 @@
 
 using namespace vgp;
 
+void callbackA(const LogContext& context) {
+    std::cout << "Callback A triggered: " << context.message << std::endl;
+}
+
+void callbackB(const LogContext& context) {
+    std::cout << "Callback B triggered: " << context.message << std::endl;
+}
+
 int main() {
+
+    Logger& logger = Logger::GetInstance();
+
+    // 为级别 4 的所有日志注册两个回调
+    auto idA = logger.AddCallback(callbackA, 4);
+    auto idB = logger.AddCallback(callbackB, 4);
+
+    // 为特定消息注册两个回调
+    logger.AddCallback(
+        [](const LogContext& context) {
+            std::cout << "Specific message callback 1" << std::endl;
+        },
+        4, "Important message"
+    );
+    logger.AddCallback(
+        [](const LogContext& context) {
+            std::cout << "Specific message callback 2" << std::endl;
+        },
+        4, "Important message"
+    );
+
+    // 记录一些日志
+    LOG(4, "This is a debug message");
+    LOG(4, "Important message");
+
     // 使用默认格式（只打印消息）
+    logger.RemoveCallback(idA);
     LOG(4, "4 This is an info message");
+
+    logger.ClearCallbacks(4);
 
     // 切换到带时间的格式
     Logger::GetInstance().SetFormat(Logger::Format::kMedium);
@@ -29,6 +65,9 @@ int main() {
    // print to console
     LOG(4, "4 test done");
     LOG(99, "This is a 99 warn message with time");
+
+    CLOG(4, "this is one compile log");
+    CLOGF(4, "this is one compile log in file");
 
     return 0;
 }
