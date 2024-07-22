@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 #include <fmt/chrono.h>
+#include <fmt/ranges.h>
+#include <fmt/compile.h>
 #include <atomic>
 #include <cstdint>
 #include <fstream>
@@ -11,13 +13,26 @@
 #include <mutex>
 #include <string>
 #include <chrono>
-#include <optional>
+#include "tl/optional.hpp"
+#include <functional>
+#include <unordered_map>
+#include <vector>
 
 #ifndef VHLOGGER_COMPILE_LEVEL
 #define VHLOGGER_COMPILE_LEVEL 0
 #endif
 
 namespace vgp {
+
+enum class LOG_LEVEL {
+  OFF = 0,
+  FATAL=1,
+  ERROR,
+  WARN,
+  INFO,
+  DEBUG,
+  TRACK
+};
 
 struct LogContext {
   int level;
@@ -36,9 +51,9 @@ class Logger {
   struct CallbackInfo {
     CallbackFunction func;
     int level;
-    std::optional<std::string> message;
-    std::optional<std::string> file;
-    std::optional<int> line;
+    tl::optional<std::string> message;
+    tl::optional<std::string> file;
+    tl::optional<int> line;
   };
 
   static Logger& GetInstance();
@@ -53,15 +68,15 @@ class Logger {
   void LogToFile(int level, const char* file, int line, const char* format, Args&&... args);
 
   CallbackId AddCallback(CallbackFunction func, int level, 
-                   std::optional<std::string> message = std::nullopt,
-                   std::optional<std::string> file = std::nullopt,
-                   std::optional<int> line = std::nullopt);
+                   tl::optional<std::string> message = tl::nullopt,
+                   tl::optional<std::string> file = tl::nullopt,
+                   tl::optional<int> line = tl::nullopt);
   bool RemoveCallback(CallbackId id);
 
   void ClearCallbacks(int level, 
-                      std::optional<std::string> message = std::nullopt,
-                      std::optional<std::string> file = std::nullopt,
-                      std::optional<int> line = std::nullopt);
+                      tl::optional<std::string> message = tl::nullopt,
+                      tl::optional<std::string> file = tl::nullopt,
+                      tl::optional<int> line = tl::nullopt);
 
  private:
     Logger() : verbose_level_(0), format_(Format::kLite) {
@@ -119,7 +134,6 @@ void Logger::LogToFile(int level, const char* file, int line, const char* format
   }
 }
 
-
 #define LOG(level, ...) \
   vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__)
 
@@ -130,14 +144,14 @@ void Logger::LogToFile(int level, const char* file, int line, const char* format
 // 编译期日志宏定义
 #define CLOG(level, ...) \
   do { \
-    if constexpr (level <= VHLOGGER_COMPILE_LEVEL) { \
+    if (level <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 
 #define CLOGF(level, ...) \
   do { \
-    if constexpr (level <= VHLOGGER_COMPILE_LEVEL) { \
+    if (level <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)

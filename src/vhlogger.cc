@@ -8,9 +8,9 @@ Logger& Logger::GetInstance() {
 }
 
 Logger::CallbackId Logger::AddCallback(CallbackFunction func, int level, 
-                         std::optional<std::string> message,
-                         std::optional<std::string> file,
-                         std::optional<int> line) {
+                         tl::optional<std::string> message,
+                         tl::optional<std::string> file,
+                         tl::optional<int> line) {
   std::lock_guard<std::mutex> lock(mutex_);
   CallbackId id = next_callback_id_++;
   callbacks_[id] = {func, level, message, file, line};
@@ -23,9 +23,9 @@ bool Logger::RemoveCallback(CallbackId id) {
 }
 
 void Logger::ClearCallbacks(int level, 
-                            std::optional<std::string> message,
-                            std::optional<std::string> file,
-                            std::optional<int> line) {
+                            tl::optional<std::string> message,
+                            tl::optional<std::string> file,
+                            tl::optional<int> line) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = callbacks_.begin();
   while (it != callbacks_.end()) {
@@ -42,7 +42,10 @@ void Logger::ClearCallbacks(int level,
 }
 
 void Logger::TriggerCallbacks(const LogContext& context) {
-  for (const auto& [id, callback] : callbacks_) {
+  for (const auto& callback_pair: callbacks_) {
+    const auto & id = callback_pair.first;
+    const auto & callback = callback_pair.second;
+
     if (context.level == callback.level &&
         (!callback.message || *callback.message == context.message) &&
         (!callback.file || *callback.file == context.file) &&
@@ -65,10 +68,12 @@ void Logger::SetLogFile(const std::string& filename, bool append) {
 std::string Logger::FormatMessage(int level, const char* file, int line, const std::string& message) {
   std::string level_str;
   switch (level) {
-    case 1: level_str = "ERROR"; break;
-    case 2: level_str = "WARN"; break;
-    case 3: level_str = "INFO"; break;
-    case 4: level_str = "DEBUG"; break;
+    case 1: level_str = "FATAL"; break;
+    case 2: level_str = "ERROR"; break;
+    case 3: level_str = "WARN"; break;
+    case 4: level_str = "INFO"; break;
+    case 5: level_str = "DEBUG"; break;
+    case 6: level_str = "TRACE"; break;
     default: level_str = "TRACE"; break;
   }
 
