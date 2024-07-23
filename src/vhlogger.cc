@@ -7,10 +7,18 @@ Logger& Logger::GetInstance() {
   return instance;
 }
 
+#ifdef CPP17_OR_GREATER
+Logger::CallbackId Logger::AddCallback(CallbackFunction func, int level, 
+                         std::optional<std::string> message,
+                         std::optional<std::string> file,
+                         std::optional<int> line) 
+#else
 Logger::CallbackId Logger::AddCallback(CallbackFunction func, int level, 
                          tl::optional<std::string> message,
                          tl::optional<std::string> file,
-                         tl::optional<int> line) {
+                         tl::optional<int> line) 
+#endif
+{
   std::lock_guard<std::mutex> lock(mutex_);
   CallbackId id = next_callback_id_++;
   callbacks_[id] = {func, level, message, file, line};
@@ -22,10 +30,18 @@ bool Logger::RemoveCallback(CallbackId id) {
   return callbacks_.erase(id) > 0;
 }
 
+#ifdef CPP17_OR_GREATER
+void Logger::ClearCallbacks(int level, 
+                            std::optional<std::string> message,
+                            std::optional<std::string> file,
+                            std::optional<int> line) 
+#else
 void Logger::ClearCallbacks(int level, 
                             tl::optional<std::string> message,
                             tl::optional<std::string> file,
-                            tl::optional<int> line) {
+                            tl::optional<int> line) 
+#endif
+{
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = callbacks_.begin();
   while (it != callbacks_.end()) {
