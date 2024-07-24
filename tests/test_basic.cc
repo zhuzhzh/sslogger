@@ -23,13 +23,13 @@ int main() {
         [](const LogContext& context) {
             std::cout << "Specific message callback 1" << std::endl;
         },
-        4, "Important message"
+        INFO, "Important message"
     );
     logger.AddCallback(
         [](const LogContext& context) {
             std::cout << "Specific message callback 2" << std::endl;
         },
-        4, "Important message"
+        vgp::INFO, "Important message"
     );
 
     // 记录一些日志
@@ -46,7 +46,7 @@ int main() {
     // 切换到带时间的格式
     Logger::GetInstance().SetFormat(Logger::Format::kMedium);
     std::vector<int> arr = {1,2,3,4};
-    LOG(5, "5 This is a debug message with time: {}", arr);
+    LOG(DEBUG, "5 This is a debug message with time: {}", arr);
     LOG(4, "4 This is a info message with time");
     LOG(2, "2 This is a warn message with time");
 

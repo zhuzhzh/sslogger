@@ -71,6 +71,11 @@ void Logger::TriggerCallbacks(const LogContext& context) {
   }
 }
 
+// New static method to set verbosity level
+void Logger::SetLogVerbose(int verbose) {
+  GetInstance().verbose_level_ = verbose;
+}
+
 void Logger::SetFormat(Format format) { format_ = format; }
 
 void Logger::SetLogFile(const std::string& filename, bool append) {

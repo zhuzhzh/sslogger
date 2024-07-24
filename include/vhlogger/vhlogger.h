@@ -34,20 +34,14 @@
 
 namespace vgp {
 
-enum class LOG_LEVEL {
-  OFF = 0,
-  FATAL=1,
-  ERROR,
-  WARN,
-  INFO,
-  DEBUG,
-  TRACK
-};
+const int  OFF = 0;
+const int  FATAL=1;
+const int  ERROR=2;
+const int  WARN=3;
+const int  INFO=4;
+const int  DEBUG=5;
+const int  TRACK=6;
 
-// Add a conversion function
-inline int to_int(LOG_LEVEL level) {
-  return static_cast<int>(level);
-}
 
 struct LogContext {
   int level;
@@ -82,39 +76,48 @@ class Logger {
   void SetFormat(Format format);
   void SetLogFile(const std::string& filename, bool append = false);
 
+  // New static method to set verbosity level
+  static void SetLogVerbose(int verbose);
+
   template <typename... Args>
   void LogToConsole(int level, const char* file, int line, const char* format, Args&&... args);
 
   template <typename... Args>
   void LogToFile(int level, const char* file, int line, const char* format, Args&&... args);
 
-  CallbackId AddCallback(CallbackFunction func, int level, 
 #ifdef CPP17_OR_GREATER
+  CallbackId AddCallback(CallbackFunction func, int level, 
                    std::optional<std::string> message = std::nullopt,
                    std::optional<std::string> file = std::nullopt,
                    std::optional<int> line = std::nullopt);
 #else
+  CallbackId AddCallback(CallbackFunction func, int level, 
                    tl::optional<std::string> message = tl::nullopt,
                    tl::optional<std::string> file = tl::nullopt,
                    tl::optional<int> line = tl::nullopt);
 #endif
   bool RemoveCallback(CallbackId id);
 
-  void ClearCallbacks(int level, 
 #ifdef CPP17_OR_GREATER
+  void ClearCallbacks(int level, 
                       std::optional<std::string> message = std::nullopt,
                       std::optional<std::string> file = std::nullopt,
                       std::optional<int> line = std::nullopt);
 #else
+  void ClearCallbacks(int level, 
                       tl::optional<std::string> message = tl::nullopt,
                       tl::optional<std::string> file = tl::nullopt,
                       tl::optional<int> line = tl::nullopt);
 #endif
  private:
-    Logger() : verbose_level_(static_cast<int>(LOG_LEVEL::WARN)), format_(Format::kLite) {
-    const char* env_verbose = std::getenv("UV_HYBRID_VERBOSE");
+    Logger() : verbose_level_(vgp::WARN), format_(Format::kLite) {
+    const char* env_verbose = std::getenv("UV_SSLN_VERBOSE");
     if (env_verbose) {
       verbose_level_ = std::atoi(env_verbose);
+    }
+    const char* env_logfile = std::getenv("UV_SSLN_LOGFILE");
+    if (env_logfile) {
+      SetLogFile(env_logfile);
     }
   }
 
