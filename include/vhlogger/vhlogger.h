@@ -111,18 +111,20 @@ namespace vgp {
 #endif
   private:
     Logger() : verbose_level_(vgp::WARN), format_(Format::kLite) {
-      const char* env_verbose = std::getenv("UV_SSLN_VERBOSE");
+      const char* env_verbose = std::getenv("SSLN_LOG_VERBOSE");
       if (env_verbose) {
         verbose_level_ = std::atoi(env_verbose);
+      } else {
+        verbose_level_ = vgp::INFO;
       }
-      const char* env_logfile = std::getenv("UV_SSLN_LOGFILE");
+      const char* env_logfile = std::getenv("SSLN_LOGFILE");
       if (env_logfile) {
         SetLogFile(env_logfile);
       } else {
-        SetLogFile("uv_hybrid.log");
+        SetLogFile("uv_ssln.log");
       }
 
-      const char* env_format = std::getenv("UV_SSLN_LOGGER_FORMAT");
+      const char* env_format = std::getenv("SSLN_LOGGER_FORMAT");
       if (env_format) {
         int format_value = std::atoi(env_format);
         switch (format_value) {
@@ -194,38 +196,51 @@ namespace vgp {
       }
     }
 
-#define LOG(level, ...) \
-  vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__)
 
-#define LOGF(level, ...) \
-  vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__)
+// #define LOG(level, ...) \
+//   vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__)
+// 
+// #define LOGF(level, ...) \
+//   vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__)
+
+  // New function definitions for logging
+
+  template <typename... Args>
+  void log(int level, const char* format, Args&&... args) {
+    vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, format, std::forward<Args>(args)...);
+  }
+
+  template <typename... Args>
+  void logf(int level, const char* format, Args&&... args) {
+    vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, format, std::forward<Args>(args)...);
+  }
 
 
   // compile-time macro
 
 #ifdef CPP17_OR_GREATER
-#define CLOG(level, ...) \
+#define VGP_CLOG(level, ...) \
   do { \
     if constexpr (level <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 
-#define CLOGF(level, ...) \
+#define VGP_CLOGF(level, ...) \
   do { \
     if constexpr (level <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 #else
-#define CLOG(level, ...) \
+#define VGP_CLOG(level, ...) \
   do { \
     if (level <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 
-#define CLOGF(level, ...) \
+#define VGP_CLOGF(level, ...) \
   do { \
     if (level <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__); \
