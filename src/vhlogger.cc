@@ -71,6 +71,17 @@ void Logger::TriggerCallbacks(const LogContext& context) {
   }
 }
 
+void Logger::LogArrayToFile(int level, const char* file, int line, const uint8_t* ptr, size_t sz) {
+    if (level <= verbose_level_) {
+        std::vector<uint8_t> vec(ptr, ptr + sz);
+        vgp::Logger::GetInstance().LogToFileNoNewLine(level, file, line, "{}", vec);
+    }
+}
+
+void logf_array(int level, const uint8_t* ptr, size_t sz) {
+    vgp::Logger::GetInstance().LogArrayToFile(level, __FILE__, __LINE__, ptr, sz);
+}
+
 // New static method to set verbosity level
 void Logger::SetLogVerbose(int verbose) {
   GetInstance().verbose_level_ = verbose;
