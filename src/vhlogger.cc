@@ -82,11 +82,6 @@ void logf_array(Logger::Level level, const uint8_t* ptr, size_t sz) {
     vgp::Logger::GetInstance().LogArrayToFile(level, __FILE__, __LINE__, ptr, sz);
 }
 
-// New static method to set verbosity level
-void Logger::SetLogVerbose(int verbose) {
-  GetInstance().current_level_ = static_cast<Level>(verbose);
-}
-
 void Logger::SetLogLevel(Level verbose) {
   GetInstance().current_level_ = verbose;
 }

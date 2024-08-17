@@ -87,7 +87,7 @@ namespace vgp {
 
   class Logger {
   public:
-    enum class Level {OFF=0,  FATAL, ERROR, WARN, INFO, DEBUG, TRACE};
+    enum class Level {OFF=0,  FATAL=1, ERROR, WARN, INFO, DEBUG, TRACE};
     enum class Format { kLite, kMedium, kFull };
 
     using CallbackFunction = std::function<void(const LogContext&)>;
@@ -111,7 +111,6 @@ namespace vgp {
 
     void SetFormat(Format format);
     void SetLogFile(const std::string& filename, bool append = false);
-    void SetLogVerbose(int verbose);
     void SetLogLevel(Level verbose);
     void SetLogLevel(int verbose);
 
@@ -203,17 +202,15 @@ namespace vgp {
 #endif
   private:
     Logger() : current_level_(Level::INFO), format_(Format::kLite) {
-      const char* env_verbose = std::getenv("SSLN_LOG_VERBOSE");
-      if (env_verbose) {
-        current_level_ = static_cast<Level>(std::atoi(env_verbose));
+      const char* env_level = std::getenv("SSLN_LOG_LEVEL");
+      if (env_level) {
+        current_level_ = static_cast<Level>(std::atoi(env_level));
       } else {
         current_level_ = Level::INFO;
       }
       const char* env_logfile = std::getenv("SSLN_LOG_FILE");
       if (env_logfile) {
         SetLogFile(env_logfile);
-      } else {
-        SetLogFile("uv_ssln.log");
       }
 
       const char* env_format = std::getenv("SSLN_LOG_FORMAT");
