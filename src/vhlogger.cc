@@ -8,12 +8,12 @@ Logger& Logger::GetInstance() {
 }
 
 #ifdef CPP17_OR_GREATER
-Logger::CallbackId Logger::AddCallback(CallbackFunction func, int level, 
+Logger::CallbackId Logger::AddCallback(CallbackFunction func, Level level, 
                          std::optional<std::string> message,
                          std::optional<std::string> file,
                          std::optional<int> line) 
 #else
-Logger::CallbackId Logger::AddCallback(CallbackFunction func, int level, 
+Logger::CallbackId Logger::AddCallback(CallbackFunction func, Level level, 
                          tl::optional<std::string> message,
                          tl::optional<std::string> file,
                          tl::optional<int> line) 
@@ -21,7 +21,7 @@ Logger::CallbackId Logger::AddCallback(CallbackFunction func, int level,
 {
   std::lock_guard<std::mutex> lock(mutex_);
   CallbackId id = next_callback_id_++;
-  callbacks_[id] = {func, level, message, file, line};
+  callbacks_[id] = {func, static_cast<int>(level), message, file, line};
   return id;
 }
 
@@ -31,12 +31,12 @@ bool Logger::RemoveCallback(CallbackId id) {
 }
 
 #ifdef CPP17_OR_GREATER
-void Logger::ClearCallbacks(int level, 
+void Logger::ClearCallbacks(Level level, 
                             std::optional<std::string> message,
                             std::optional<std::string> file,
                             std::optional<int> line) 
 #else
-void Logger::ClearCallbacks(int level, 
+void Logger::ClearCallbacks(Level level, 
                             tl::optional<std::string> message,
                             tl::optional<std::string> file,
                             tl::optional<int> line) 
@@ -46,7 +46,7 @@ void Logger::ClearCallbacks(int level,
   auto it = callbacks_.begin();
   while (it != callbacks_.end()) {
     const auto& callback = it->second;
-    if (callback.level == level &&
+    if (callback.level == static_cast<int>(level) &&
         (!message || callback.message == message) &&
         (!file || callback.file == file) &&
         (!line || callback.line == line)) {
@@ -71,20 +71,27 @@ void Logger::TriggerCallbacks(const LogContext& context) {
   }
 }
 
-void Logger::LogArrayToFile(int level, const char* file, int line, const uint8_t* ptr, size_t sz) {
-    if (level <= verbose_level_) {
+void Logger::LogArrayToFile(Level level, const char* file, int line, const uint8_t* ptr, size_t sz) {
+    if (level <= current_level_) {
         std::vector<uint8_t> vec(ptr, ptr + sz);
         vgp::Logger::GetInstance().LogToFileNoNewLine(level, file, line, "{}", vec);
     }
 }
 
-void logf_array(int level, const uint8_t* ptr, size_t sz) {
+void logf_array(Logger::Level level, const uint8_t* ptr, size_t sz) {
     vgp::Logger::GetInstance().LogArrayToFile(level, __FILE__, __LINE__, ptr, sz);
 }
 
 // New static method to set verbosity level
 void Logger::SetLogVerbose(int verbose) {
-  GetInstance().verbose_level_ = verbose;
+  GetInstance().current_level_ = static_cast<Level>(verbose);
+}
+
+void Logger::SetLogLevel(Level verbose) {
+  GetInstance().current_level_ = verbose;
+}
+void Logger::SetLogLevel(int verbose) {
+  GetInstance().current_level_ = static_cast<Level>(verbose);
 }
 
 void Logger::SetFormat(Format format) { format_ = format; }
@@ -97,9 +104,9 @@ void Logger::SetLogFile(const std::string& filename, bool append) {
   log_file_.open(filename, append ? std::ios_base::app : std::ios_base::out);
 }
 
-std::string Logger::FormatMessage(int level, const char* file, int line, const std::string& message) {
+std::string Logger::FormatMessage(Level level, const char* file, int line, const std::string& message) {
   std::string level_str;
-  switch (level) {
+  switch (static_cast<int>(level)) {
     case 1: level_str = "FATAL"; break;
     case 2: level_str = "ERROR"; break;
     case 3: level_str = "WARN"; break;
@@ -121,4 +128,42 @@ std::string Logger::FormatMessage(int level, const char* file, int line, const s
       return fmt::format("[{}][{}][{}:{}] {}", level_str, fmt::format("{:%Y-%m-%d %H:%M:%S}", now), file, line, message);
   }
 }
+
+void Logger::log_impl(const source_location& loc, Level level, const std::string& msg)
+{
+    static const char* level_strings[] = {"OFF", "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
+    std::string level_str = level_strings[static_cast<int>(level)];
+
+    auto now = std::chrono::system_clock::now();
+    
+    std::string formatted_msg;
+    switch (format_) {
+        case Format::kLite:
+            formatted_msg = msg;
+            break;
+        case Format::kMedium:
+            formatted_msg = fmt::format("[{}][{}] {}", level_str, fmt::format("{:%Y-%m-%d %H:%M:%S}", now), msg);
+            break;
+        case Format::kFull:
+        default:
+            formatted_msg = fmt::format("[{}][{}][{}:{}:{}] {}", 
+                level_str, 
+                fmt::format("{:%Y-%m-%d %H:%M:%S}", now), 
+                loc.file_name(), 
+                loc.line(), 
+                loc.function_name(), 
+                msg);
+            break;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (log_file_.is_open()) {
+        log_file_ << formatted_msg << std::endl;
+    } else {
+        fmt::print("{}\n", formatted_msg);
+    }
 }
+
+
+}
+
