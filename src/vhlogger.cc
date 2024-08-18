@@ -74,7 +74,7 @@ void Logger::TriggerCallbacks(const LogContext& context) {
 void Logger::LogArrayToFile(Level level, const char* file, int line, const uint8_t* ptr, size_t sz) {
     if (level <= current_level_) {
         std::vector<uint8_t> vec(ptr, ptr + sz);
-        vgp::Logger::GetInstance().LogToFileNoNewLine(level, file, line, "{}", vec);
+        vgp::Logger::GetInstance().LogToFile(level, file, line, "{}", vec);
     }
 }
 

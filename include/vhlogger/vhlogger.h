@@ -126,12 +126,6 @@ namespace vgp {
     template <typename... Args>
       void LogToFile(Level level, const char* caller_file, int caller_line, const char* format, Args&&... args);
 
-    template <typename... Args>
-      void LogToConsoleNoNewLine(Level level, const char* caller_file, int caller_line, const char* format, Args&&... args);
-
-    template <typename... Args>
-      void LogToFileNoNewLine(Level level, const char* caller_file, int caller_line, fmt::format_string<Args...> format, Args&&... args);
-
     void LogArrayToFile(Level level, const char* caller_file, int caller_line, const uint8_t* ptr, size_t sz);
 
     template<typename... Args>
@@ -150,6 +144,12 @@ namespace vgp {
     };
 
     // Overloaded logging functions that accept logger_loc
+    template<typename... Args>
+    void log(const logger_loc& loc, Level level, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, level, fmt, std::forward<Args>(args)...);
+    }
+
     template<typename... Args>
     void trace(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
     {
@@ -306,96 +306,45 @@ namespace vgp {
       }
     }
 
-  template <typename... Args>
-    void Logger::LogToConsoleNoNewLine(Level level, const char* file, int line, const char* format, Args&&... args) {
-      if (level <= current_level_) {
-        std::string message = fmt::format(format, std::forward<Args>(args)...);
-        std::string formatted_message = FormatMessage(level, file, line, message);
-        {
-          std::lock_guard<std::mutex> lock(mutex_);
-          std::cout << formatted_message;
-        }
-        LogContext context{static_cast<int>(level), file, line, message};
-        TriggerCallbacks(context);
-      }
-    }
-
-  template <typename... Args>
-    void Logger::LogToFileNoNewLine(Level level, const char* file, int line, fmt::format_string<Args...> format, Args&&... args) {
-      if (level <= current_level_) {
-        fmt::memory_buffer buf;
-        fmt::format_to(std::back_inserter(buf), format, std::forward<Args>(args)...);
-        nonstd::string_view message(buf.data(), buf.size());
-        std::string formatted_message = FormatMessage(level, file, line, std::string(message));
-
-        {
-          std::lock_guard<std::mutex> lock(mutex_);
-          if (log_file_.is_open()) {
-            log_file_ << formatted_message;
-            log_file_.flush();
-          } else {
-            std::cout << formatted_message;
-            std::cout.flush();
-          }
-        }
-        LogContext context{static_cast<int>(level), file, line, std::string(message)};
-        TriggerCallbacks(context);
-      }
-    }
-
   // New function definitions for logging
 
   template <typename... Args>
     void log(Logger::Level level, const char* caller_file, int caller_line, const char* format, Args&&... args) {
-      vgp::Logger::GetInstance().LogToConsoleNoNewLine(level, caller_file, caller_line, format, std::forward<Args>(args)...);
-    }
-
-  template <typename... Args>
-    void logf(Logger::Level level, const char* caller_file, int caller_line, fmt::format_string<Args...> format, Args&&... args) {
-      vgp::Logger::GetInstance().LogToFileNoNewLine(level, caller_file, caller_line, format, std::forward<Args>(args)...);
-    }
-
-  template <typename... Args>
-    void logn(Logger::Level level, const char* caller_file, int caller_line, const char* format, Args&&... args) {
       vgp::Logger::GetInstance().LogToConsole(level, caller_file, caller_line, format, std::forward<Args>(args)...);
     }
 
   template <typename... Args>
-    void logfn(Logger::Level level, const char* caller_file, int caller_line, const char* format, Args&&... args) {
+    void logf(Logger::Level level, const char* caller_file, int caller_line, fmt::format_string<Args...> format, Args&&... args) {
       vgp::Logger::GetInstance().LogToFile(level, caller_file, caller_line, format, std::forward<Args>(args)...);
     }
 
   void logf_array(Logger::Level level, const uint8_t* ptr, size_t sz);
 
+// Update the VGP_LOG macro
 #define VGP_LOG(level, ...) \
-  vgp::log(level, __FILE__, __LINE__, __VA_ARGS__)
+    vgp::logger().log(VGP_LOG_LOC, level, __VA_ARGS__)
 
+// Update the VGP_LOGF macro
 #define VGP_LOGF(level, ...) \
-  vgp::logf(level, __FILE__, __LINE__, __VA_ARGS__)
-
-#define VGP_LOGN(level, ...) \
-  vgp::logn(level, __FILE__, __LINE__, __VA_ARGS__)
-
-#define VGP_LOGFN(level, ...) \
-  vgp::logfn(level, __FILE__, __LINE__, __VA_ARGS__)
+    vgp::logger().log(VGP_LOG_LOC, level, __VA_ARGS__)
 
 #define VGP_LOGF_ARRAY(level, ptr, sz) \
   vgp::logf_array(level, __FILE__, __LINE__, ptr, sz)
 
-  // Update the compile-time macros
+// Update the compile-time macros
 
 #ifdef CPP17_OR_GREATER
 #define VGP_CLOG(level, ...) \
   do { \
     if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToConsoleNoNewLine(level, __FILE__, __LINE__, __VA_ARGS__); \
+      vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 
 #define VGP_CLOGF(level, ...) \
   do { \
     if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToFileNoNewLine(level, __FILE__, __LINE__, __VA_ARGS__); \
+      vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 
@@ -406,48 +355,21 @@ namespace vgp {
     } \
   } while (0)
 
-#define VGP_CLOGN(level, ...) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
-    } \
-  } while (0)
-
-#define VGP_CLOGFN(level, ...) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__); \
-    } \
-  } while (0)
 #else
 #define VGP_CLOG(level, ...) \
   do { \
     if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToConsoleNoNewLine(level, __FILE__, __LINE__, __VA_ARGS__); \
+      vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 
 #define VGP_CLOGF(level, ...) \
   do { \
     if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToFileNoNewLine(level, __FILE__, __LINE__, __VA_ARGS__); \
-    } \
-  } while (0)
-#define VGP_CLOGN(level, ...) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::Logger::GetInstance().LogToConsole(level, __FILE__, __LINE__, __VA_ARGS__); \
-    } \
-  } while (0)
-
-#define VGP_CLOGFN(level, ...) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
       vgp::Logger::GetInstance().LogToFile(level, __FILE__, __LINE__, __VA_ARGS__); \
     } \
   } while (0)
 #endif
-
 
   inline Logger& logger() {
     return Logger::GetInstance();
