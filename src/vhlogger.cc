@@ -184,6 +184,8 @@ void Logger::log_impl(const source_location& loc, Level level, const std::string
     } else {
         fmt::print("{}\n", formatted_msg);
     }
+    LogContext context{static_cast<int>(level), loc.file_name(), loc.line(), msg};
+    TriggerCallbacks(context);
 }
 
 const char* Logger::ToString(Level level) {
