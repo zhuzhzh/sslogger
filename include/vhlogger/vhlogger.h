@@ -17,6 +17,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "nonstd/string_view.hpp"
+
 // Check for C++17 support
 #if __cplusplus >= 201703L
 #define CPP17_OR_GREATER
@@ -24,7 +26,6 @@
 
 #ifdef CPP17_OR_GREATER
 #include <optional>
-#include <string_view>
 #else
 #include "tl/optional.hpp"
 #endif
@@ -33,7 +34,7 @@
 #define VHLOGGER_COMPILE_LEVEL 3
 #endif
 
-// 自定义格式化器，用于控制每行16个元素的输出
+// 自定义格式化器，用于控制每行32个元素的输出
 // 修改后的自定义格式化器
 template<>
 struct fmt::formatter<std::vector<uint8_t>> {
@@ -45,7 +46,7 @@ struct fmt::formatter<std::vector<uint8_t>> {
     auto format(const std::vector<uint8_t>& vec, FormatContext& ctx) const -> decltype(ctx.out()) {
       for (size_t i = 0; i < vec.size(); ++i) {
         if (i > 0) {
-          if (i % 16 == 0) {
+          if (i % 32 == 0) {
             fmt::format_to(ctx.out(), "\n");
           } else {
             fmt::format_to(ctx.out(), " ");
@@ -87,8 +88,9 @@ namespace vgp {
 
   class Logger {
   public:
-    enum class Level {OFF=0,  FATAL=1, ERROR, WARN, INFO, DEBUG, TRACE};
-    enum class Format { kLite, kMedium, kFull };
+    enum class Level :int {OFF=0,  FATAL=1, ERROR, WARN, INFO, DEBUG, TRACE};
+    enum class Format :int { kLite, kMedium, kFull };
+    const char* ToString(Level level);
 
     using CallbackFunction = std::function<void(const LogContext&)>;
     using CallbackId = std::size_t;
@@ -109,10 +111,14 @@ namespace vgp {
 
     static Logger& GetInstance();
 
-    void SetFormat(Format format);
-    void SetLogFile(const std::string& filename, bool append = false);
-    void SetLogLevel(Level verbose);
-    void SetLogLevel(int verbose);
+    Logger& SetFormat(Format format);
+    Logger& SetLogFile(const std::string& filename, bool append = false);
+    Logger& SetLogLevel(Level verbose);
+    Logger& SetLogLevel(int verbose);
+
+    const Format GetFormat() const;
+    const std::string GetLogFile() const;
+    const Level GetLogLevel() const;
 
     template <typename... Args>
       void LogToConsole(Level level, const char* caller_file, int caller_line, const char* format, Args&&... args);
@@ -252,6 +258,7 @@ namespace vgp {
     Format format_;
     std::mutex mutex_;
     std::ofstream log_file_;
+    std::string file_name_;
     std::unordered_map<CallbackId, CallbackInfo> callbacks_;
     CallbackId next_callback_id_;
 
@@ -261,10 +268,12 @@ namespace vgp {
   template <typename... Args>
     void Logger::LogToConsole(Level level, const char* file, int line, const char* format, Args&&... args) {
       if (level <= current_level_) {
-        std::lock_guard<std::mutex> lock(mutex_);
         std::string message = fmt::format(format, std::forward<Args>(args)...);
         std::string formatted_message = FormatMessage(level, file, line, message);
-        std::cout << formatted_message << std::endl;
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          std::cout << formatted_message << std::endl;
+        }
         LogContext context{static_cast<int>(level), file, line, message};
         TriggerCallbacks(context);
       }
@@ -273,18 +282,20 @@ namespace vgp {
   template <typename... Args>
     void Logger::LogToFile(Level level, const char* file, int line, const char* format, Args&&... args) {
       if (level <= current_level_) {
-        std::lock_guard<std::mutex> lock(mutex_);
         fmt::memory_buffer buf;
         fmt::format_to(std::back_inserter(buf), format, std::forward<Args>(args)...);
         std::string message(buf.data(), buf.size());
         std::string formatted_message = FormatMessage(level, file, line, message);
 
-        if (log_file_.is_open()) {
-          log_file_ << formatted_message << std::endl;
-          log_file_.flush();
-        } else {
-          std::cout << formatted_message << std::endl;
-          std::cout.flush();
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          if (log_file_.is_open()) {
+            log_file_ << formatted_message << std::endl;
+            log_file_.flush();
+          } else {
+            std::cout << formatted_message << std::endl;
+            std::cout.flush();
+          }
         }
         LogContext context{static_cast<int>(level), file, line, message};
         TriggerCallbacks(context);
@@ -294,10 +305,12 @@ namespace vgp {
   template <typename... Args>
     void Logger::LogToConsoleNoNewLine(Level level, const char* file, int line, const char* format, Args&&... args) {
       if (level <= current_level_) {
-        std::lock_guard<std::mutex> lock(mutex_);
         std::string message = fmt::format(format, std::forward<Args>(args)...);
         std::string formatted_message = FormatMessage(level, file, line, message);
-        std::cout << formatted_message;
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          std::cout << formatted_message;
+        }
         LogContext context{static_cast<int>(level), file, line, message};
         TriggerCallbacks(context);
       }
@@ -306,22 +319,20 @@ namespace vgp {
   template <typename... Args>
     void Logger::LogToFileNoNewLine(Level level, const char* file, int line, fmt::format_string<Args...> format, Args&&... args) {
       if (level <= current_level_) {
-        std::lock_guard<std::mutex> lock(mutex_);
         fmt::memory_buffer buf;
         fmt::format_to(std::back_inserter(buf), format, std::forward<Args>(args)...);
-#ifdef CPP17_OR_GREATER
-        std::string_view message(buf.data(), buf.size());
-#else
-        std::string message(buf.data(), buf.size());
-#endif
+        nonstd::string_view message(buf.data(), buf.size());
         std::string formatted_message = FormatMessage(level, file, line, std::string(message));
 
-        if (log_file_.is_open()) {
-          log_file_ << formatted_message;
-          log_file_.flush();
-        } else {
-          std::cout << formatted_message;
-          std::cout.flush();
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          if (log_file_.is_open()) {
+            log_file_ << formatted_message;
+            log_file_.flush();
+          } else {
+            std::cout << formatted_message;
+            std::cout.flush();
+          }
         }
         LogContext context{static_cast<int>(level), file, line, std::string(message)};
         TriggerCallbacks(context);

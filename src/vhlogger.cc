@@ -82,21 +82,48 @@ void logf_array(Logger::Level level, const uint8_t* ptr, size_t sz) {
     vgp::Logger::GetInstance().LogArrayToFile(level, __FILE__, __LINE__, ptr, sz);
 }
 
-void Logger::SetLogLevel(Level verbose) {
-  GetInstance().current_level_ = verbose;
-}
-void Logger::SetLogLevel(int verbose) {
-  GetInstance().current_level_ = static_cast<Level>(verbose);
+Logger& Logger::SetLogLevel(Level verbose) {
+  current_level_.store(verbose, std::memory_order_relaxed);
+  return *this;
 }
 
-void Logger::SetFormat(Format format) { format_ = format; }
+Logger& Logger::SetLogLevel(int verbose) {
+  current_level_.store(static_cast<Level>(verbose), std::memory_order_relaxed);
+  return *this;
+}
 
-void Logger::SetLogFile(const std::string& filename, bool append) {
+Logger& Logger::SetFormat(Format format) { 
   std::lock_guard<std::mutex> lock(mutex_);
+  format_ = format; 
+  return *this;
+}
+
+Logger& Logger::SetLogFile(const std::string& filename, bool append) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  file_name_ = filename;
   if (log_file_.is_open()) {
     log_file_.close();
   }
-  log_file_.open(filename, append ? std::ios_base::app : std::ios_base::out);
+  std::ios_base::openmode mode = std::ios_base::out;
+  if (append) {
+    mode |= std::ios_base::app;
+  }
+
+  log_file_.open(filename, mode);
+  if (!log_file_) {
+    throw std::runtime_error("Failed to open log file: " + filename);
+  }
+  return *this;
+}
+
+const Logger::Format Logger::GetFormat() const {
+  return format_;
+}
+const std::string Logger::GetLogFile() const {
+  return file_name_;
+}
+const Logger::Level Logger::GetLogLevel() const {
+  return current_level_;
 }
 
 std::string Logger::FormatMessage(Level level, const char* file, int line, const std::string& message) {
@@ -159,6 +186,18 @@ void Logger::log_impl(const source_location& loc, Level level, const std::string
     }
 }
 
-
+const char* Logger::ToString(Level level) {
+    switch (level) {
+        case Level::TRACE: return "TRACE";
+        case Level::DEBUG: return "DEBUG";
+        case Level::INFO: return "INFO";
+        case Level::WARN: return "WARN";
+        case Level::ERROR: return "ERROR";
+        case Level::FATAL: return "FATAL";
+        case Level::OFF: return "OFF";
+        default: return "UNKNOWN";
+    }
 }
+
+} // namespace vgp
 
