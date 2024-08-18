@@ -66,7 +66,7 @@ int main() {
     VGP_LOGF(Level::TRACE, "99 This is a warn message in file with time\n");
 
    // print to console
-    vgp::logger().info("4 test done\n");
+    VGP_INFO("4 test done\n");
     VGP_WARN("This is a 99 warn message with time\n");
 
     VGP_CLOG(Level::INFO, "this is one compile log\n");
@@ -79,9 +79,9 @@ int main() {
 
     vgp::logf_array(Level::INFO, data, size);
 
-    vgp::logger().warn("This is a warn message with time in file or console\n");
+    VGP_WARN("This is a warn message with time in file or console\n");
     vgp::Logger::GetInstance().SetFormat(vgp::Logger::Format::kLite);
-    vgp::logger().debug("This is a debug message with time in file or console with lite format\n");
+    VGP_DEBUG("This is a debug message with time in file or console with lite format\n");
 
     return 0;
 }
