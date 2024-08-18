@@ -71,15 +71,43 @@ void Logger::TriggerCallbacks(const LogContext& context) {
   }
 }
 
-void Logger::LogArrayToFile(Level level, const char* file, int line, const uint8_t* ptr, size_t sz) {
+void Logger::LogArray(const logger_loc& loc, Level level, bool to_file, const uint8_t* ptr, size_t sz) {
     if (level <= current_level_) {
         std::vector<uint8_t> vec(ptr, ptr + sz);
-        vgp::Logger::GetInstance().LogToFile(level, file, line, "{}", vec);
+        Log(loc.loc_, level, to_file, "{}", vec);
     }
 }
 
-void logf_array(Logger::Level level, const uint8_t* ptr, size_t sz) {
-    vgp::Logger::GetInstance().LogArrayToFile(level, __FILE__, __LINE__, ptr, sz);
+Logger::Level Logger::ParseLogLevel(const std::string& level) {
+  // Convert to uppercase for case-insensitive comparison
+  std::string upper_level = level;
+  std::transform(upper_level.begin(), upper_level.end(), upper_level.begin(), ::toupper);
+
+  if (upper_level == "OFF" || upper_level == "0") return Level::OFF;
+  if (upper_level == "FATAL" || upper_level == "1") return Level::FATAL;
+  if (upper_level == "ERROR" || upper_level == "2") return Level::ERROR;
+  if (upper_level == "WARN" || upper_level == "3") return Level::WARN;
+  if (upper_level == "INFO" || upper_level == "4") return Level::INFO;
+  if (upper_level == "DEBUG" || upper_level == "5") return Level::DEBUG;
+  if (upper_level == "TRACE" || upper_level == "6") return Level::TRACE;
+
+  // If it's not a recognized string, try to parse it as a number
+  try {
+    int level_num = std::stoi(level);
+    if (level_num >= 0 && level_num <= 6) {
+      return static_cast<Level>(level_num);
+    } else if (level_num > 6) {
+      return static_cast<Level>(6);
+    } else if (level_num < 0 ) {
+      return static_cast<Level>(0);
+    }
+  } catch (const std::exception&) {
+    // If parsing as a number fails, we'll fall through to the default case
+  }
+
+  // If we get here, the input was invalid. Log a warning and return the default level.
+  std::cerr << "Invalid log level: " << level << ". Using default level (INFO)." << std::endl;
+  return Level::INFO;
 }
 
 Logger& Logger::SetLogLevel(Level verbose) {
@@ -151,9 +179,9 @@ std::string Logger::FormatMessage(Level level, const char* file, int line, const
   }
 }
 
-void Logger::log_impl(const source_location& loc, Level level, const std::string& msg)
+void Logger::LogImpl(const source_location& loc, Level level, const std::string& msg, bool to_file)
 {
-    static const char* level_strings[] = {"OFF", "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
+    static const char* level_strings[] = {"OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"};
     std::string level_str = level_strings[static_cast<int>(level)];
 
     auto now = std::chrono::system_clock::now();
@@ -178,11 +206,17 @@ void Logger::log_impl(const source_location& loc, Level level, const std::string
             break;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (log_file_.is_open()) {
-        log_file_ << formatted_msg << std::endl;
-    } else {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if(to_file) {
+        if (log_file_.is_open()) {
+            log_file_ << formatted_msg << std::endl;
+        } else {
+            fmt::print("{}\n", formatted_msg);
+        }
+      } else {
         fmt::print("{}\n", formatted_msg);
+      }
     }
     LogContext context{static_cast<int>(level), loc.file_name(), loc.line(), msg};
     TriggerCallbacks(context);
