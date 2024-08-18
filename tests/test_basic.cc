@@ -40,6 +40,8 @@ int main() {
     // 使用默认格式（只打印消息）
     logger.RemoveCallback(idA);
     VGP_INFO("4 This is an info message\n");
+    vgp::logger().info(VGP_LOG_LOC, "4 This is an info message\n");
+
 
     logger.ClearCallbacks(Level::INFO);
 

@@ -134,53 +134,57 @@ namespace vgp {
 
     void LogArrayToFile(Level level, const char* caller_file, int caller_line, const uint8_t* ptr, size_t sz);
 
-    // implement for spdlog-style api
     template<typename... Args>
-      void log(const source_location& loc, Level level, fmt::format_string<Args...> fmt, Args&&... args)
-      {
+    void log(const source_location& loc, Level level, fmt::format_string<Args...> fmt, Args&&... args)
+    {
         if (level <= current_level_.load()) {
-          auto msg = fmt::format(fmt, std::forward<Args>(args)...);
-          log_impl(loc, level, msg);
+            auto msg = fmt::format(fmt, std::forward<Args>(args)...);
+            log_impl(loc, level, msg);
         }
-      }
+    }
+
+    // Helper struct to capture source location
+    struct logger_loc {
+        constexpr logger_loc(const source_location& loc) : loc_(loc) {}
+        const source_location& loc_;
+    };
+
+    // Overloaded logging functions that accept logger_loc
+    template<typename... Args>
+    void trace(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, Level::TRACE, fmt, std::forward<Args>(args)...);
+    }
 
     template<typename... Args>
-      void trace(fmt::format_string<Args...> fmt, Args&&... args)
-      {
-        log(source_location{}, Level::TRACE, fmt, std::forward<Args>(args)...);
-      }
+    void debug(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, Level::DEBUG, fmt, std::forward<Args>(args)...);
+    }
 
     template<typename... Args>
-      void debug(fmt::format_string<Args...> fmt, Args&&... args)
-      {
-        log(source_location{}, Level::DEBUG, fmt, std::forward<Args>(args)...);
-      }
+    void info(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, Level::INFO, fmt, std::forward<Args>(args)...);
+    }
 
     template<typename... Args>
-      void info(fmt::format_string<Args...> fmt, Args&&... args)
-      {
-        log(source_location{}, Level::INFO, fmt, std::forward<Args>(args)...);
-      }
+    void warn(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, Level::WARN, fmt, std::forward<Args>(args)...);
+    }
 
     template<typename... Args>
-      void warn(fmt::format_string<Args...> fmt, Args&&... args)
-      {
-        log(source_location{}, Level::WARN, fmt, std::forward<Args>(args)...);
-      }
+    void error(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, Level::ERROR, fmt, std::forward<Args>(args)...);
+    }
 
     template<typename... Args>
-      void error(fmt::format_string<Args...> fmt, Args&&... args)
-      {
-        log(source_location{}, Level::ERROR, fmt, std::forward<Args>(args)...);
-      }
-
-    template<typename... Args>
-      void critical(fmt::format_string<Args...> fmt, Args&&... args)
-      {
-        log(source_location{}, Level::FATAL, fmt, std::forward<Args>(args)...);
-      }
-
-
+    void critical(const logger_loc& loc, fmt::format_string<Args...> fmt, Args&&... args)
+    {
+        log(loc.loc_, Level::FATAL, fmt, std::forward<Args>(args)...);
+    }
 
 #ifdef CPP17_OR_GREATER
     CallbackId AddCallback(CallbackFunction func, Level level, 
@@ -451,11 +455,15 @@ namespace vgp {
 
 }  // namespace vgp
 
-#define VGP_TRACE(...) vgp::logger().trace(__VA_ARGS__)
-#define VGP_DEBUG(...) vgp::logger().debug(__VA_ARGS__)
-#define VGP_INFO(...) vgp::logger().info(__VA_ARGS__)
-#define VGP_WARN(...) vgp::logger().warn(__VA_ARGS__)
-#define VGP_ERROR(...) vgp::logger().error(__VA_ARGS__)
-#define VGP_CRITICAL(...) vgp::logger().critical(__VA_ARGS__)
+// Define a macro to create a logger_loc object with current source location
+#define VGP_LOG_LOC vgp::Logger::logger_loc{vgp::source_location{}}
+
+// Update the macros to use VGP_LOG_LOC
+#define VGP_TRACE(...) vgp::logger().trace(VGP_LOG_LOC, __VA_ARGS__)
+#define VGP_DEBUG(...) vgp::logger().debug(VGP_LOG_LOC, __VA_ARGS__)
+#define VGP_INFO(...) vgp::logger().info(VGP_LOG_LOC, __VA_ARGS__)
+#define VGP_WARN(...) vgp::logger().warn(VGP_LOG_LOC, __VA_ARGS__)
+#define VGP_ERROR(...) vgp::logger().error(VGP_LOG_LOC, __VA_ARGS__)
+#define VGP_CRITICAL(...) vgp::logger().critical(VGP_LOG_LOC, __VA_ARGS__)
 
 #endif  // VGP_VHLOGGER_H_
