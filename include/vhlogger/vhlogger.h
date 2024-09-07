@@ -112,7 +112,9 @@ namespace vgp {
 #endif
     };
 
-    static Logger& GetInstance();
+    static void Init();
+    static void Shutdown();
+    static Logger* GetInstance();
 
     Logger& SetFormat(Format format);
     Logger& SetLogFile(const std::string& filename, bool append = false);
@@ -123,12 +125,16 @@ namespace vgp {
     const std::string GetLogFile() const;
     const Level GetLogLevel() const;
 
+    ~Logger();
+
     template<typename... Args>
     void Log(const source_location& loc, Level level, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
     {
-        if (level <= current_level_.load()) {
-            auto msg = fmt::format(fmt, std::forward<Args>(args)...);
-            EnqueueLogMessage(LogMessage{loc, level, to_file, std::move(msg)});
+        if (is_initialized_.load(std::memory_order_acquire)) {
+          if (level <= current_level_.load()) {
+              auto msg = fmt::format(fmt, std::forward<Args>(args)...);
+              EnqueueLogMessage(LogMessage{loc, level, to_file, std::move(msg)});
+          }
         }
     }
 
@@ -208,9 +214,10 @@ namespace vgp {
       tl::optional<int> line = tl::nullopt);
 #endif
   private:
-    Logger() : current_level_(Level::INFO), format_(Format::kLite), running_(true) {
+    Logger() : current_level_(Level::INFO), format_(Format::kLite){
+      running_.store(true, std::memory_order_acquire);
+      is_initialized_.store(true, std::memory_order_acquire);
       worker_thread_ = std::thread(&Logger::WorkerThread, this);
-      std::atexit([]() { GetInstance().Shutdown(); });
       const char* env_level = std::getenv("SSLN_LOG_LEVEL");
       if (env_level) {
         current_level_ = ParseLogLevel(env_level);
@@ -247,7 +254,6 @@ namespace vgp {
     }
     Level ParseLogLevel(const std::string& level);
 
-    ~Logger() {Shutdown();}
 
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
@@ -261,7 +267,7 @@ namespace vgp {
 
     void EnqueueLogMessage(LogMessage&& msg);
     void WorkerThread();
-    void Shutdown();
+    void FlushQueue();
 
     std::string FormatMessage(Level level, const char* file, int line, const std::string& message);
     void TriggerCallbacks(const LogContext& context);
@@ -275,81 +281,23 @@ namespace vgp {
     CallbackId next_callback_id_;
 
     std::atomic<bool> running_;
+    std::atomic<bool> is_initialized_;
     std::queue<LogMessage> log_queue_;
     std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     std::thread worker_thread_;
 
-    std::atomic<bool> shutdown_requested_;
-    std::atomic<bool> shutdown_completed_;
-    std::condition_variable shutdown_cv_;
+    static std::unique_ptr<Logger> instance_;
+    static std::once_flag init_flag_;
+
+    void ActualShutdown();
 
     void LogImpl(const source_location& loc, Level level, const std::string& msg, bool to_file=true);
   };
 
-  // New function definitions for logging
-
-// Update the VGP_LOG macro
-#define VGP_LOG(level, ...) \
-    vgp::logger().Log(VGP_LOG_LOC, level, false, __VA_ARGS__)
-
-// Update the VGP_LOGF macro
-#define VGP_LOGF(level, ...) \
-    vgp::logger().Log(VGP_LOG_LOC, level, true, __VA_ARGS__)
-
-#define VGP_LOG_ARRAY(level, ptr, sz) \
-  vgp::logger().LogArray(VGP_LOG_LOC, level, false, ptr, sz)
-
-#define VGP_LOGF_ARRAY(level, ptr, sz) \
-  vgp::logger().LogArray(VGP_LOG_LOC, level, true, ptr, sz)
-
-// Update the compile-time macros
-
-#ifdef CPP17_OR_GREATER
-#define VGP_CLOG(level, ...) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::logger().Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
-    } \
-  } while (0)
-
-#define VGP_CLOGF(level, ...) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::logger().Log(VGP_LOG_LOC, level, true, __VA_ARGS__); \
-    } \
-  } while (0)
-
-#define VGP_CLOGF_ARRAY(level, ptr, sz) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::logger().LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
-    } \
-  } while (0)
-#else
-#define VGP_CLOG(level, ...) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::logger().Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
-    } \
-  } while (0)
-
-#define VGP_CLOGF(level, ...) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::logger().Log(VGP_LOG_LOC, level, true,  __VA_ARGS__); \
-    } \
-  } while (0)
-#define VGP_CLOGF_ARRAY(level, ptr, sz) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-      vgp::logger().LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
-    } \
-  } while (0)
-#endif
 
   inline Logger& logger() {
-    return Logger::GetInstance();
+    return *Logger::GetInstance();
   }
 
 }  // namespace vgp
@@ -357,20 +305,152 @@ namespace vgp {
 // Define a macro to create a logger_loc object with current source location
 #define VGP_LOG_LOC vgp::Logger::logger_loc{vgp::source_location{}}
 
+// Update the VGP_LOG macro
+#define VGP_LOG(level, ...) \
+  do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+    logger->Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
+    } \
+  } while(0)
+
+// Update the VGP_LOGF macro
+#define VGP_LOGF(level, ...) \
+  do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+    logger->Log(VGP_LOG_LOC, level, true, __VA_ARGS__); \
+    } \
+  } while(0)
+
+#define VGP_LOG_ARRAY(level, ptr, sz) \
+  do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->LogArray(VGP_LOG_LOC, level, false, ptr, sz); \
+    } \
+  } while(0)
+
+#define VGP_LOGF_ARRAY(level, ptr, sz) \
+  do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
+    } \
+  } while(0)
+
+// Update the compile-time macros
+
+#ifdef CPP17_OR_GREATER
+#define VGP_CLOG(level, ...) \
+  do { \
+    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
+    }\
+    } \
+  } while (0)
+
+#define VGP_CLOGF(level, ...) \
+  do { \
+    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->Log(VGP_LOG_LOC, level, true, __VA_ARGS__); \
+    } \
+    } \
+  } while (0)
+
+#define VGP_CLOGF_ARRAY(level, ptr, sz) \
+  do { \
+    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
+    } \
+    } \
+  } while (0)
+#else
+#define VGP_CLOG(level, ...) \
+  do { \
+    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
+    } \
+    } \
+  } while (0)
+
+#define VGP_CLOGF(level, ...) \
+  do { \
+    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->Log(VGP_LOG_LOC, level, true,  __VA_ARGS__); \
+    } \
+    } \
+  } while (0)
+#define VGP_CLOGF_ARRAY(level, ptr, sz) \
+  do { \
+    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
+    } \
+    } \
+  } while (0)
+#endif
+
 // Update the macros to use VGP_LOG_LOC
-#define VGP_TRACE(...) vgp::logger().Trace(VGP_LOG_LOC, false, __VA_ARGS__)
-#define VGP_DEBUG(...) vgp::logger().Debug(VGP_LOG_LOC, false, __VA_ARGS__)
-#define VGP_INFO(...) vgp::logger().Info(VGP_LOG_LOC, false, __VA_ARGS__)
-#define VGP_WARN(...) vgp::logger().Warn(VGP_LOG_LOC, false, __VA_ARGS__)
-#define VGP_ERROR(...) vgp::logger().Error(VGP_LOG_LOC, false, __VA_ARGS__)
-#define VGP_CRITICAL(...) vgp::logger().Critical(VGP_LOG_LOC, false, __VA_ARGS__)
+#define VGP_TRACE(...)  do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Trace(VGP_LOG_LOC, false, __VA_ARGS__) \
+    } \
+} while(0)
+#define VGP_DEBUG(...)   do { \
+      logger->Debug(VGP_LOG_LOC, false, __VA_ARGS__); \
+} while(0)
+#define VGP_INFO(...) do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Trace(VGP_LOG_LOC, false, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_WARN(...)do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Warn(VGP_LOG_LOC, false, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_ERROR(...) do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Error(VGP_LOG_LOC, false, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_CRITICAL(...) do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Critical(VGP_LOG_LOC, false, __VA_ARGS__); \
+    } \
+} while(0)
 
-#define VGP_TRACEF(...) vgp::logger().Trace(VGP_LOG_LOC, true, __VA_ARGS__)
-#define VGP_DEBUGF(...) vgp::logger().Debug(VGP_LOG_LOC, true, __VA_ARGS__)
-#define VGP_INFOF(...) vgp::logger().Info(VGP_LOG_LOC, true, __VA_ARGS__)
-#define VGP_WARNF(...) vgp::logger().Warn(VGP_LOG_LOC, true, __VA_ARGS__)
-#define VGP_ERRORF(...) vgp::logger().Error(VGP_LOG_LOC, true, __VA_ARGS__)
-#define VGP_CRITICALF(...) vgp::logger().Critical(VGP_LOG_LOC, true, __VA_ARGS__)
-
+#define VGP_TRACEF(...)  do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Trace(VGP_LOG_LOC, true, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_DEBUGF(...)   do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+      logger->Debug(VGP_LOG_LOC, true, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_INFOF(...) do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Trace(VGP_LOG_LOC, true, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_WARNF(...)do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Warn(VGP_LOG_LOC, true, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_ERRORF(...) do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Error(VGP_LOG_LOC, true, __VA_ARGS__); \
+    } \
+} while(0)
+#define VGP_CRITICALF(...) do { \
+    if (auto logger = vgp::Logger::GetInstance()) { \
+  logger->Critical(VGP_LOG_LOC, true, __VA_ARGS__); \
+    } \
+} while(0)
 
 #endif  // VGP_VHLOGGER_H_

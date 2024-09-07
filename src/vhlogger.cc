@@ -1,78 +1,45 @@
 #include "vhlogger/vhlogger.h"
+#include <atomic>
+#include <chrono>
 
 namespace vgp {
 
-  Logger& Logger::GetInstance() {
-    static Logger instance;
-    return instance;
-  }
+std::unique_ptr<Logger> Logger::instance_ = nullptr;
+std::once_flag Logger::init_flag_;
 
-#ifdef CPP17_OR_GREATER
-  Logger::CallbackId Logger::AddCallback(CallbackFunction func, Level level, 
-    std::optional<std::string> message,
-    std::optional<std::string> file,
-    std::optional<int> line) 
-#else
-    Logger::CallbackId Logger::AddCallback(CallbackFunction func, Level level, 
-      tl::optional<std::string> message,
-      tl::optional<std::string> file,
-      tl::optional<int> line) 
-#endif
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      CallbackId id = next_callback_id_++;
-      callbacks_[id] = {func, static_cast<int>(level), message, file, line};
-      return id;
+void Logger::Init() {
+    std::call_once(init_flag_, []() {
+      instance_.reset(new Logger());
+      });
+}
+
+Logger* Logger::GetInstance() {
+  return instance_.get();
+}
+
+void Logger::Shutdown() {
+    if (instance_) {
+        instance_->ActualShutdown();
+        instance_.reset();
     }
+}
 
-  bool Logger::RemoveCallback(CallbackId id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return callbacks_.erase(id) > 0;
+Logger::~Logger() {
+  if(is_initialized_.load(std::memory_order_acquire)) {
+    ActualShutdown();
   }
-
-#ifdef CPP17_OR_GREATER
-  void Logger::ClearCallbacks(Level level, 
-    std::optional<std::string> message,
-    std::optional<std::string> file,
-    std::optional<int> line) 
-#else
-    void Logger::ClearCallbacks(Level level, 
-      tl::optional<std::string> message,
-      tl::optional<std::string> file,
-      tl::optional<int> line) 
-#endif
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      auto it = callbacks_.begin();
-      while (it != callbacks_.end()) {
-        const auto& callback = it->second;
-        if (callback.level == static_cast<int>(level) &&
-          (!message || callback.message == message) &&
-          (!file || callback.file == file) &&
-          (!line || callback.line == line)) {
-          it = callbacks_.erase(it);
-        } else {
-          ++it;
-        }
-      }
-    }
+}
 
   void Logger::EnqueueLogMessage(LogMessage&& msg) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    if (!shutdown_requested_.load()) {
-        log_queue_.push(std::move(msg));
-        queue_cv_.notify_one();
-    } else {
-        // Optionally, handle messages that come in during shutdown
-        // For example, you could write them directly or discard them
-        LogImpl(msg.loc, msg.level, "Message discarded during shutdown: " + msg.message, msg.to_file);
-    }
+    log_queue_.push(std::move(msg));
+    queue_cv_.notify_one();
   }
 
   void Logger::WorkerThread() {
-    while (true) {
+    while (running_.load(std::memory_order_acquire)) {
       std::unique_lock<std::mutex> lock(queue_mutex_);
-      queue_cv_.wait(lock, [this] { return !log_queue_.empty() || shutdown_requested_.load(); });
+      queue_cv_.wait_for(lock, std::chrono::milliseconds(100), [this] { return !log_queue_.empty() || !running_.load(std::memory_order_acquire);});
 
       while (!log_queue_.empty()) {
         auto msg = std::move(log_queue_.front());
@@ -81,40 +48,35 @@ namespace vgp {
         LogImpl(msg.loc, msg.level, msg.message, msg.to_file);
         lock.lock();
       }
-
-      if (shutdown_requested_.load() && log_queue_.empty()) {
-        shutdown_completed_.store(true);
-        shutdown_cv_.notify_one();
-        break;
-      }
     }
   }
 
-  void Logger::Shutdown() {
-    {
-      std::lock_guard<std::mutex> lock(queue_mutex_);
-      if (shutdown_requested_.exchange(true)) {
-        // Shutdown already in progress
-        return;
-      }
+void Logger::FlushQueue() {
+    std::unique_lock<std::mutex> lock(queue_mutex_);
+    while (!log_queue_.empty()) {
+        auto msg = std::move(log_queue_.front());
+        log_queue_.pop();
+        lock.unlock();
+        LogImpl(msg.loc, msg.level, msg.message, msg.to_file);
+        lock.lock();
     }
+}
 
-    // Notify the worker thread to process remaining messages
-    queue_cv_.notify_one();
-
-    // Wait for the worker thread to finish processing
-    {
-      std::unique_lock<std::mutex> lock(queue_mutex_);
-      shutdown_cv_.wait(lock, [this] { return shutdown_completed_.load(); });
-    }
+  void Logger::ActualShutdown() {
+    running_.store(false, std::memory_order_release);
+    queue_cv_.notify_all();
 
     if (worker_thread_.joinable()) {
       worker_thread_.join();
     }
 
+    FlushQueue();
+
     if (log_file_.is_open()) {
       log_file_.close();
     }
+
+    is_initialized_.store(false, std::memory_order_release);
   }
 
   void Logger::TriggerCallbacks(const LogContext& context) {
@@ -226,7 +188,8 @@ namespace vgp {
     default: level_str = "TRACE"; break;
     }
 
-    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::time(nullptr);
+    auto now = fmt::localtime(t);
 
     switch (format_) {
     case Format::kLite:
@@ -244,7 +207,8 @@ namespace vgp {
     static const char* level_strings[] = {"OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"};
     std::string level_str = level_strings[static_cast<int>(level)];
 
-    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::time(nullptr);
+    auto now = fmt::localtime(t);
 
     std::string formatted_msg;
     switch (format_) {
@@ -294,6 +258,57 @@ namespace vgp {
     default: return "UNKNOWN";
     }
   }
+
+#ifdef CPP17_OR_GREATER
+  Logger::CallbackId Logger::AddCallback(CallbackFunction func, Level level, 
+    std::optional<std::string> message,
+    std::optional<std::string> file,
+    std::optional<int> line) 
+#else
+    Logger::CallbackId Logger::AddCallback(CallbackFunction func, Level level, 
+      tl::optional<std::string> message,
+      tl::optional<std::string> file,
+      tl::optional<int> line) 
+#endif
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      CallbackId id = next_callback_id_++;
+      callbacks_[id] = {func, static_cast<int>(level), message, file, line};
+      return id;
+    }
+
+  bool Logger::RemoveCallback(CallbackId id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return callbacks_.erase(id) > 0;
+  }
+
+#ifdef CPP17_OR_GREATER
+  void Logger::ClearCallbacks(Level level, 
+    std::optional<std::string> message,
+    std::optional<std::string> file,
+    std::optional<int> line) 
+#else
+    void Logger::ClearCallbacks(Level level, 
+      tl::optional<std::string> message,
+      tl::optional<std::string> file,
+      tl::optional<int> line) 
+#endif
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = callbacks_.begin();
+      while (it != callbacks_.end()) {
+        const auto& callback = it->second;
+        if (callback.level == static_cast<int>(level) &&
+          (!message || callback.message == message) &&
+          (!file || callback.file == file) &&
+          (!line || callback.line == line)) {
+          it = callbacks_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+    }
+
 
 } // namespace vgp
 
