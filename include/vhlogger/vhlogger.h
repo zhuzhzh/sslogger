@@ -2,6 +2,7 @@
 #ifndef VGP_VHLOGGER_H_
 #define VGP_VHLOGGER_H_
 
+#include <condition_variable>
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 #include <fmt/ranges.h>
@@ -11,9 +12,11 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <queue>
 #include <string>
 #include <chrono>
 #include <functional>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -125,7 +128,7 @@ namespace vgp {
     {
         if (level <= current_level_.load()) {
             auto msg = fmt::format(fmt, std::forward<Args>(args)...);
-            LogImpl(loc, level, msg, to_file);
+            EnqueueLogMessage(LogMessage{loc, level, to_file, std::move(msg)});
         }
     }
 
@@ -205,7 +208,9 @@ namespace vgp {
       tl::optional<int> line = tl::nullopt);
 #endif
   private:
-    Logger() : current_level_(Level::INFO), format_(Format::kLite) {
+    Logger() : current_level_(Level::INFO), format_(Format::kLite), running_(true) {
+      worker_thread_ = std::thread(&Logger::WorkerThread, this);
+      std::atexit([]() { GetInstance().Shutdown(); });
       const char* env_level = std::getenv("SSLN_LOG_LEVEL");
       if (env_level) {
         current_level_ = ParseLogLevel(env_level);
@@ -242,13 +247,21 @@ namespace vgp {
     }
     Level ParseLogLevel(const std::string& level);
 
-    ~Logger() {
-      if (log_file_.is_open()) {
-        log_file_.close();
-      }
-    }
+    ~Logger() {Shutdown();}
+
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
+
+    struct LogMessage {
+      source_location loc;
+      Level level;
+      bool to_file;
+      std::string message;
+    };
+
+    void EnqueueLogMessage(LogMessage&& msg);
+    void WorkerThread();
+    void Shutdown();
 
     std::string FormatMessage(Level level, const char* file, int line, const std::string& message);
     void TriggerCallbacks(const LogContext& context);
@@ -260,6 +273,16 @@ namespace vgp {
     std::string file_name_;
     std::unordered_map<CallbackId, CallbackInfo> callbacks_;
     CallbackId next_callback_id_;
+
+    std::atomic<bool> running_;
+    std::queue<LogMessage> log_queue_;
+    std::mutex queue_mutex_;
+    std::condition_variable queue_cv_;
+    std::thread worker_thread_;
+
+    std::atomic<bool> shutdown_requested_;
+    std::atomic<bool> shutdown_completed_;
+    std::condition_variable shutdown_cv_;
 
     void LogImpl(const source_location& loc, Level level, const std::string& msg, bool to_file=true);
   };
