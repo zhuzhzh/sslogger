@@ -4,31 +4,69 @@
 
 namespace vgp {
 
-std::unique_ptr<Logger> Logger::instance_ = nullptr;
-std::once_flag Logger::init_flag_;
+  std::unique_ptr<Logger> Logger::instance_ = nullptr;
+  std::once_flag Logger::init_flag_;
 
-void Logger::Init() {
+  Logger* Logger::GetInstance() {
     std::call_once(init_flag_, []() {
       instance_.reset(new Logger());
       });
-}
-
-Logger* Logger::GetInstance() {
-  return instance_.get();
-}
-
-void Logger::Shutdown() {
-    if (instance_) {
-        instance_->ActualShutdown();
-        instance_.reset();
-    }
-}
-
-Logger::~Logger() {
-  if(is_initialized_.load(std::memory_order_acquire)) {
-    ActualShutdown();
+    return instance_.get();
   }
-}
+
+  void Logger::Shutdown() {
+    if (instance_) {
+      instance_->ActualShutdown();
+      instance_.reset();
+    }
+  }
+
+  Logger::~Logger() {
+    if(is_initialized_.load(std::memory_order_acquire)) {
+      ActualShutdown();
+    }
+  }
+
+  Logger::Logger() {
+    current_level_ = Level::INFO;
+    format_ = Format::kLite;
+    running_.store(true, std::memory_order_acquire);
+    is_initialized_.store(true, std::memory_order_acquire);
+    worker_thread_ = std::thread(&Logger::WorkerThread, this);
+    const char* env_level = std::getenv("SSLN_LOG_LEVEL");
+    if (env_level) {
+      current_level_ = ParseLogLevel(env_level);
+    } else {
+      current_level_ = Level::INFO;
+    }
+    const char* env_logfile = std::getenv("SSLN_LOG_FILE");
+    if (env_logfile) {
+      SetLogFile(env_logfile);
+    }
+
+    const char* env_format = std::getenv("SSLN_LOG_FORMAT");
+    if (env_format) {
+      int format_value = std::atoi(env_format);
+      switch (format_value) {
+      case 0:
+        SetFormat(Format::kLite);
+        break;
+      case 1:
+        SetFormat(Format::kMedium);
+        break;
+      case 2:
+        SetFormat(Format::kFull);
+        break;
+      default:
+        std::cerr << "Invalid format value in SSLN_LOG_FORMAT: " << format_value
+          << ". Using default format (kLite)." << std::endl;
+        SetFormat(Format::kLite);
+        break;
+      }
+    } else {
+      SetFormat(Format::kLite);
+    }
+  }
 
   void Logger::EnqueueLogMessage(LogMessage&& msg) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
@@ -51,16 +89,16 @@ Logger::~Logger() {
     }
   }
 
-void Logger::FlushQueue() {
+  void Logger::FlushQueue() {
     std::unique_lock<std::mutex> lock(queue_mutex_);
     while (!log_queue_.empty()) {
-        auto msg = std::move(log_queue_.front());
-        log_queue_.pop();
-        lock.unlock();
-        LogImpl(msg.loc, msg.level, msg.message, msg.to_file);
-        lock.lock();
+      auto msg = std::move(log_queue_.front());
+      log_queue_.pop();
+      lock.unlock();
+      LogImpl(msg.loc, msg.level, msg.message, msg.to_file);
+      lock.lock();
     }
-}
+  }
 
   void Logger::ActualShutdown() {
     running_.store(false, std::memory_order_release);

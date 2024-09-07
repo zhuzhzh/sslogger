@@ -112,7 +112,6 @@ namespace vgp {
 #endif
     };
 
-    static void Init();
     static void Shutdown();
     static Logger* GetInstance();
 
@@ -214,44 +213,7 @@ namespace vgp {
       tl::optional<int> line = tl::nullopt);
 #endif
   private:
-    Logger() : current_level_(Level::INFO), format_(Format::kLite){
-      running_.store(true, std::memory_order_acquire);
-      is_initialized_.store(true, std::memory_order_acquire);
-      worker_thread_ = std::thread(&Logger::WorkerThread, this);
-      const char* env_level = std::getenv("SSLN_LOG_LEVEL");
-      if (env_level) {
-        current_level_ = ParseLogLevel(env_level);
-      } else {
-        current_level_ = Level::INFO;
-      }
-      const char* env_logfile = std::getenv("SSLN_LOG_FILE");
-      if (env_logfile) {
-        SetLogFile(env_logfile);
-      }
-
-      const char* env_format = std::getenv("SSLN_LOG_FORMAT");
-      if (env_format) {
-        int format_value = std::atoi(env_format);
-        switch (format_value) {
-        case 0:
-          SetFormat(Format::kLite);
-          break;
-        case 1:
-          SetFormat(Format::kMedium);
-          break;
-        case 2:
-          SetFormat(Format::kFull);
-          break;
-        default:
-          std::cerr << "Invalid format value in SSLN_LOG_FORMAT: " << format_value
-            << ". Using default format (kLite)." << std::endl;
-          SetFormat(Format::kLite);
-          break;
-        }
-      } else {
-        SetFormat(Format::kLite);
-      }
-    }
+    Logger();
     Level ParseLogLevel(const std::string& level);
 
 

@@ -12,7 +12,7 @@ void callbackB(const vgp::LogContext& context) {
 
 int main() {
 
-    vgp::Logger::Init();
+    //vgp::Logger::Init();
 
     vgp::Logger* logger = vgp::Logger::GetInstance();
 
@@ -101,6 +101,6 @@ int main() {
     vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kFull);
     VGP_DEBUGF("3 This is a debug message with time in file or console with lite format");
 
-    vgp::Logger::Shutdown();
+    //vgp::Logger::Shutdown();
     return 0;
 }
