@@ -11,24 +11,24 @@
 #include <functional>
 #include <string>
 
-#define LOGLEVEL_TRACE    spdlog::level::trace
-#define LOGLEVEL_DEBUG    spdlog::level::debug
-#define LOGLEVEL_INFO     spdlog::level::info
-#define LOGLEVEL_WARN     spdlog::level::warn
-#define LOGLEVEL_ERROR    spdlog::level::err
-#define LOGLEVEL_FATAL spdlog::level::critical
-#define LOGLEVEL_OFF      spdlog::level::off
+#define VHLOGGER_TRACE    spdlog::level::trace
+#define VHLOGGER_DEBUG    spdlog::level::debug
+#define VHLOGGER_INFO     spdlog::level::info
+#define VHLOGGER_WARN     spdlog::level::warn
+#define VHLOGGER_ERROR    spdlog::level::err
+#define VHLOGGER_FATAL    spdlog::level::critical
+#define VHLOGGER_OFF      spdlog::level::off
 
 namespace vgp {
 
   class Logger {
   public:
-    enum class Format { kLite, kMedium, kFull };
+    enum class Format { kLite, kLow, kMedium, kHigh, kFull, kUltra};
 
     using CallbackFunction = std::function<void(const spdlog::details::log_msg&)>;
 
     struct CallbackCondition {
-      spdlog::level::level_enum level = LOGLEVEL_OFF;
+      spdlog::level::level_enum level = VHLOGGER_OFF;
       std::string file;
       int line = -1;
       std::string function;
@@ -55,8 +55,11 @@ namespace vgp {
     Logger& SetFormat(Format format) {
       switch (format) {
       case Format::kLite: pattern_ = "%v"; break;
-      case Format::kMedium: pattern_ = "[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v"; break;
-      case Format::kFull: pattern_ = "[%Y-%m-%d %H:%M:%S.%e %z] [%n] [%^---%L---%$] [thread %t] [%!] %v"; break;
+      case Format::kLow: pattern_ = "[%H:%M:%S.%f] %v"; break;
+      case Format::kMedium: pattern_ = "[%H:%M:%S.%f][%^%L%$][%@] %v"; break;
+      case Format::kHigh: pattern_ = "[%H:%M:%S.%f][%^%L%$][thread %t][%@] %v"; break;
+      case Format::kFull: pattern_ = "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][thread %t][%!][%#] %v"; break;
+      case Format::kUltra: pattern_ = "[%Y-%m-%d %H:%M:%S.%F][%^%L%$][thread %t][%!][%@] %v"; break;
       }
       console_logger_->set_pattern(pattern_);
       if (file_logger_) file_logger_->set_pattern(pattern_);
@@ -69,52 +72,52 @@ namespace vgp {
 
     template<typename... Args>
       void Debug(const char* fmt, const Args&... args) {
-        Log(LOGLEVEL_DEBUG, fmt, args...);
+        Log(VHLOGGER_DEBUG, fmt, args...);
       }
 
     template<typename... Args>
       void DebugF(const char* fmt, const Args&... args) {
-        LogF(LOGLEVEL_DEBUG, fmt, args...);
+        LogF(VHLOGGER_DEBUG, fmt, args...);
       }
 
     template<typename... Args>
       void Trace(const char* fmt, const Args&... args) {
-        Log(LOGLEVEL_TRACE, fmt, args...);
+        Log(VHLOGGER_TRACE, fmt, args...);
       }
 
     template<typename... Args>
       void TraceF(const char* fmt, const Args&... args) {
-        LogF(LOGLEVEL_TRACE, fmt, args...);
+        LogF(VHLOGGER_TRACE, fmt, args...);
       }
 
     template<typename... Args>
       void Info(const char* fmt, const Args&... args) {
-        Log(LOGLEVEL_INFO, fmt, args...);
+        Log(VHLOGGER_INFO, fmt, args...);
       }
 
     template<typename... Args>
       void InfoF(const char* fmt, const Args&... args) {
-        LogF(LOGLEVEL_INFO, fmt, args...);
+        LogF(VHLOGGER_INFO, fmt, args...);
       }
 
     template<typename... Args>
       void Error(const char* fmt, const Args&... args) {
-        Log(LOGLEVEL_ERROR, fmt, args...);
+        Log(VHLOGGER_ERROR, fmt, args...);
       }
 
     template<typename... Args>
       void ErrorF(const char* fmt, const Args&... args) {
-        LogF(LOGLEVEL_ERROR, fmt, args...);
+        LogF(VHLOGGER_ERROR, fmt, args...);
       }
 
     template<typename... Args>
       void Fatal(const char* fmt, const Args&... args) {
-        Log(LOGLEVEL_FATAL, fmt, args...);
+        Log(VHLOGGER_FATAL, fmt, args...);
       }
 
     template<typename... Args>
       void FatalF(const char* fmt, const Args&... args) {
-        Log(LOGLEVEL_FATAL, fmt, args...);
+        Log(VHLOGGER_FATAL, fmt, args...);
       }
 
     // Implement Trace, Info, Warn, Error, Fatal similarly...
@@ -148,7 +151,9 @@ namespace vgp {
     template<typename... Args>
       void Log(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
         console_logger_->log(level, fmt, args...);
+#ifdef VHLOGGER_ENABLE_CB
         TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+#endif
       }
 
     template<typename... Args>
@@ -180,7 +185,7 @@ namespace vgp {
 
     bool MatchesCondition(const CallbackCondition& condition,
       const spdlog::details::log_msg& msg) {
-      if (condition.level != LOGLEVEL_OFF && condition.level != msg.level) {
+      if (condition.level != VHLOGGER_OFF && condition.level != msg.level) {
         return false;
       }
       if (!condition.file.empty() && msg.source.filename != condition.file) {
