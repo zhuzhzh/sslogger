@@ -2,417 +2,232 @@
 #ifndef VGP_VHLOGGER_H_
 #define VGP_VHLOGGER_H_
 
-#include <condition_variable>
-#include <fmt/format.h>
-#include <fmt/chrono.h>
-#include <fmt/ranges.h>
-#include <fmt/compile.h>
-#include <atomic>
-#include <cstdint>
-#include <fstream>
-#include <iostream>
-#include <mutex>
-#include <queue>
-#include <string>
-#include <chrono>
-#include <functional>
-#include <thread>
-#include <unordered_map>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/fmt/bin_to_hex.h>
+#include <memory>
 #include <vector>
+#include <functional>
+#include <string>
 
-#include "nonstd/string_view.hpp"
-
-// Check for C++17 support
-#if __cplusplus >= 201703L
-#define CPP17_OR_GREATER
-#endif
-
-#ifdef CPP17_OR_GREATER
-#include <optional>
-#else
-#include "tl/optional.hpp"
-#endif
-
-#ifndef VHLOGGER_COMPILE_LEVEL
-#define VHLOGGER_COMPILE_LEVEL 3
-#endif
-
-// 自定义格式化器，用于控制每行32个元素的输出
-// 修改后的自定义格式化器
-template<>
-struct fmt::formatter<std::vector<uint8_t>> {
-  constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
-    return ctx.end();
-  }
-
-  template <typename FormatContext>
-    auto format(const std::vector<uint8_t>& vec, FormatContext& ctx) const -> decltype(ctx.out()) {
-      fmt::format_to(ctx.out(), "\n");
-      for (size_t i = 0; i < vec.size(); ++i) {
-        if (i > 0) {
-          if (i % 32 == 0) {
-            fmt::format_to(ctx.out(), "\n");
-          } else {
-            fmt::format_to(ctx.out(), " ");
-          }
-        }
-        fmt::format_to(ctx.out(), "{:02X}", vec[i]);
-      }
-      return ctx.out();
-    }
-};
 
 namespace vgp {
 
-  struct source_location
-  {
-    constexpr source_location(const char* file = __builtin_FILE(),
-      int line = __builtin_LINE(),
-      const char* function = __builtin_FUNCTION())
-      : file_(file), line_(line), function_(function) {}
-
-    constexpr const char* file_name() const { return file_; }
-    constexpr int line() const { return line_; }
-    constexpr const char* function_name() const { return function_; }
-
-  private:
-    const char* file_;
-    int line_;
-    const char* function_;
-  };
-
-  struct LogContext {
-    int level;
-    std::string file;
-    int line;
-    std::string message;
-  };
-
-
   class Logger {
   public:
-    enum class Level :int {OFF=0,  FATAL=1, ERROR, WARN, INFO, DEBUG, TRACE};
-    enum class Format :int { kLite, kMedium, kFull };
-    const char* ToString(Level level);
+    enum class Level { OFF = 0, FATAL = 1, ERROR, WARN, INFO, DEBUG, TRACE };
+    enum class Format { kLite, kMedium, kFull };
 
-    using CallbackFunction = std::function<void(const LogContext&)>;
-    using CallbackId = std::size_t;
+    using CallbackFunction = std::function<void(const spdlog::details::log_msg&)>;
 
-    struct CallbackInfo {
-      CallbackFunction func;
-      int level;
-#ifdef CPP17_OR_GREATER
-      std::optional<std::string> message;
-      std::optional<std::string> file;
-      std::optional<int> line;
-#else
-      tl::optional<std::string> message;
-      tl::optional<std::string> file;
-      tl::optional<int> line;
-#endif
-    };
-
-    static void Shutdown();
-    static Logger* GetInstance();
-
-    Logger& SetFormat(Format format);
-    Logger& SetLogFile(const std::string& filename, bool append = false);
-    Logger& SetLogLevel(Level verbose);
-    Logger& SetLogLevel(int verbose);
-
-    const Format GetFormat() const;
-    const std::string GetLogFile() const;
-    const Level GetLogLevel() const;
-
-    ~Logger();
-
-    template<typename... Args>
-    void Log(const source_location& loc, Level level, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        if (is_initialized_.load(std::memory_order_acquire)) {
-          if (level <= current_level_.load()) {
-              auto msg = fmt::format(fmt, std::forward<Args>(args)...);
-              EnqueueLogMessage(LogMessage{loc, level, to_file, std::move(msg)});
-          }
-        }
-    }
-
-    // Helper struct to capture source location
-    struct logger_loc {
-        constexpr logger_loc(const source_location& loc) : loc_(loc) {}
-        const source_location& loc_;
-    };
-
-    void LogArray(const logger_loc& loc, Level level, bool to_file, const uint8_t* ptr, size_t sz);
-
-    // Overloaded logging functions that accept logger_loc
-    template<typename... Args>
-    void Log(const logger_loc& loc, Level level, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, level, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void Trace(const logger_loc& loc, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, Level::TRACE, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void Debug(const logger_loc& loc, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, Level::DEBUG, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void Info(const logger_loc& loc, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, Level::INFO, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void Warn(const logger_loc& loc, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, Level::WARN, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void Error(const logger_loc& loc, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, Level::ERROR, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-    template<typename... Args>
-    void Critical(const logger_loc& loc, bool to_file, fmt::format_string<Args...> fmt, Args&&... args)
-    {
-        Log(loc.loc_, Level::FATAL, to_file, fmt, std::forward<Args>(args)...);
-    }
-
-#ifdef CPP17_OR_GREATER
-    CallbackId AddCallback(CallbackFunction func, Level level, 
-      std::optional<std::string> message = std::nullopt,
-      std::optional<std::string> file = std::nullopt,
-      std::optional<int> line = std::nullopt);
-#else
-    CallbackId AddCallback(CallbackFunction func, Level level, 
-      tl::optional<std::string> message = tl::nullopt,
-      tl::optional<std::string> file = tl::nullopt,
-      tl::optional<int> line = tl::nullopt);
-#endif
-    bool RemoveCallback(CallbackId id);
-
-#ifdef CPP17_OR_GREATER
-    void ClearCallbacks(Level level, 
-      std::optional<std::string> message = std::nullopt,
-      std::optional<std::string> file = std::nullopt,
-      std::optional<int> line = std::nullopt);
-#else
-    void ClearCallbacks(Level level, 
-      tl::optional<std::string> message = tl::nullopt,
-      tl::optional<std::string> file = tl::nullopt,
-      tl::optional<int> line = tl::nullopt);
-#endif
-  private:
-    Logger();
-    Level ParseLogLevel(const std::string& level);
-
-
-    Logger(const Logger&) = delete;
-    Logger& operator=(const Logger&) = delete;
-
-    struct LogMessage {
-      source_location loc;
-      Level level;
-      bool to_file;
+    struct CallbackCondition {
+      Level level = Level::OFF;
+      std::string file;
+      int line = -1;
+      std::string function;
       std::string message;
     };
 
-    void EnqueueLogMessage(LogMessage&& msg);
-    void WorkerThread();
-    void FlushQueue();
+    static Logger* GetInstance() {
+      static Logger instance;
+      return &instance;
+    }
 
-    std::string FormatMessage(Level level, const char* file, int line, const std::string& message);
-    void TriggerCallbacks(const LogContext& context);
+    Logger& SetLogFile(const std::string& filename, bool append = false) {
+      file_sink_ = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename, append);
+      UpdateLoggers();
+      return *this;
+    }
 
-    std::atomic<Level> current_level_;
-    Format format_;
-    std::mutex mutex_;
-    std::ofstream log_file_;
-    std::string file_name_;
-    std::unordered_map<CallbackId, CallbackInfo> callbacks_;
-    CallbackId next_callback_id_;
+    Logger& SetLogLevel(Level level) {
+      console_logger_->set_level(ConvertLevel(level));
+      if (file_logger_) file_logger_->set_level(ConvertLevel(level));
+      return *this;
+    }
 
-    std::atomic<bool> running_;
-    std::atomic<bool> is_initialized_;
-    std::queue<LogMessage> log_queue_;
-    std::mutex queue_mutex_;
-    std::condition_variable queue_cv_;
-    std::thread worker_thread_;
+    Logger& SetFormat(Format format) {
+      switch (format) {
+      case Format::kLite: pattern_ = "%v"; break;
+      case Format::kMedium: pattern_ = "[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v"; break;
+      case Format::kFull: pattern_ = "[%Y-%m-%d %H:%M:%S.%e %z] [%n] [%^---%L---%$] [thread %t] [%!] %v"; break;
+      }
+      console_logger_->set_pattern(pattern_);
+      if (file_logger_) file_logger_->set_pattern(pattern_);
+      return *this;
+    }
 
-    static std::unique_ptr<Logger> instance_;
-    static std::once_flag init_flag_;
+    void AddCallback(const CallbackCondition& condition, CallbackFunction callback) {
+      callbacks_.push_back({condition, callback});
+    }
 
-    void ActualShutdown();
+    template<typename... Args>
+      void Debug(const char* fmt, const Args&... args) {
+        Log(Level::DEBUG, fmt, args...);
+      }
 
-    void LogImpl(const source_location& loc, Level level, const std::string& msg, bool to_file=true);
+    template<typename... Args>
+      void DebugF(const char* fmt, const Args&... args) {
+        LogF(Level::DEBUG, fmt, args...);
+      }
+
+    template<typename... Args>
+      void Trace(const char* fmt, const Args&... args) {
+        Log(Level::TRACE, fmt, args...);
+      }
+
+    template<typename... Args>
+      void TraceF(const char* fmt, const Args&... args) {
+        LogF(Level::TRACE, fmt, args...);
+      }
+
+    template<typename... Args>
+      void Info(const char* fmt, const Args&... args) {
+        Log(Level::INFO, fmt, args...);
+      }
+
+    template<typename... Args>
+      void InfoF(const char* fmt, const Args&... args) {
+        LogF(Level::INFO, fmt, args...);
+      }
+
+    template<typename... Args>
+      void Error(const char* fmt, const Args&... args) {
+        Log(Level::ERROR, fmt, args...);
+      }
+
+    template<typename... Args>
+      void ErrorF(const char* fmt, const Args&... args) {
+        LogF(Level::ERROR, fmt, args...);
+      }
+
+    template<typename... Args>
+      void Fatal(const char* fmt, const Args&... args) {
+        Log(Level::FATAL, fmt, args...);
+      }
+
+    template<typename... Args>
+      void FatalF(const char* fmt, const Args&... args) {
+        LogF(Level::FATAL, fmt, args...);
+      }
+
+    // Implement Trace, Info, Warn, Error, Fatal similarly...
+
+    void LogArray(Level level, const uint8_t* ptr, int size, bool to_file = false) {
+      auto log_msg = fmt::format("Array data: {}", spdlog::to_hex(ptr, ptr + size));
+      if (to_file && file_logger_) {
+        file_logger_->log(ConvertLevel(level), log_msg);
+      } else {
+        console_logger_->log(ConvertLevel(level), log_msg);
+      }
+      TriggerCallbacks(level, "", -1, "", log_msg);
+    }
+
+  private:
+    Logger() {
+      console_sink_ = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+      console_logger_ = std::make_shared<spdlog::logger>("console", console_sink_);
+      spdlog::set_default_logger(console_logger_);
+    }
+
+    void UpdateLoggers() {
+      if (file_sink_) {
+        file_logger_ = std::make_shared<spdlog::logger>("file_logger", file_sink_);
+        file_logger_->set_level(console_logger_->level());
+        file_logger_->set_pattern(pattern_);
+      }
+    }
+
+    spdlog::level::level_enum ConvertLevel(Level level) {
+      switch (level) {
+      case Level::TRACE: return spdlog::level::trace;
+      case Level::DEBUG: return spdlog::level::debug;
+      case Level::INFO: return spdlog::level::info;
+      case Level::WARN: return spdlog::level::warn;
+      case Level::ERROR: return spdlog::level::err;
+      case Level::FATAL: return spdlog::level::critical;
+      default: return spdlog::level::off;
+      }
+    }
+
+    template<typename... Args>
+      void Log(Level level, const char* fmt, const Args&... args) {
+        console_logger_->log(ConvertLevel(level), fmt, args...);
+        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+      }
+
+    template<typename... Args>
+      void LogF(Level level, const char* fmt, const Args&... args) {
+        if (file_logger_) {
+          file_logger_->log(ConvertLevel(level), fmt, args...);
+          TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+        }
+      }
+
+    void TriggerCallbacks(Level level, const std::string& file, int line,
+      const std::string& function, const std::string& message) {
+      spdlog::details::log_msg msg;
+      msg.level = ConvertLevel(level);
+      msg.time = std::chrono::system_clock::now();
+      msg.source.filename = file.c_str();
+      msg.source.line = line;
+      msg.source.funcname = function.c_str();
+      msg.payload = message;
+
+      for (const auto& cb : callbacks_) {
+        if (MatchesCondition(cb.first, msg)) {
+          cb.second(msg);
+        }
+      }
+    }
+
+    bool MatchesCondition(const CallbackCondition& condition,
+      const spdlog::details::log_msg& msg) {
+      if (condition.level != Level::OFF && ConvertLevel(condition.level) != msg.level) {
+        return false;
+      }
+      if (!condition.file.empty() && msg.source.filename != condition.file) {
+        return false;
+      }
+      if (condition.line != -1 && msg.source.line != condition.line) {
+        return false;
+      }
+      if (!condition.function.empty() && msg.source.funcname != condition.function) {
+        return false;
+      }
+      if (!condition.message.empty() && msg.payload.compare(condition.message) == std::string::npos) {
+        return false;
+      }
+      return true;
+    }
+
+    std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink_;
+    std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink_;
+    std::shared_ptr<spdlog::logger> console_logger_;
+    std::shared_ptr<spdlog::logger> file_logger_;
+    std::string pattern_;
+    std::vector<std::pair<CallbackCondition, CallbackFunction>> callbacks_;
+
   };
 
+} // namespace vgp
 
-  inline Logger& logger() {
-    return *Logger::GetInstance();
-  }
+// Macro definitions
+#define VGP_DEBUG(...) vgp::Logger::GetInstance()->Debug(__VA_ARGS__)
+#define VGP_TRACE(...) vgp::Logger::GetInstance()->Trace(__VA_ARGS__)
+#define VGP_INFO(...) vgp::Logger::GetInstance()->Info(__VA_ARGS__)
+#define VGP_WARN(...) vgp::Logger::GetInstance()->Warn(__VA_ARGS__)
+#define VGP_ERROR(...) vgp::Logger::GetInstance()->Error(__VA_ARGS__)
+#define VGP_FATAL(...) vgp::Logger::GetInstance()->Fatal(__VA_ARGS__)
 
-}  // namespace vgp
+#define VGP_DEBUGF(...) vgp::Logger::GetInstance()->DebugF(__VA_ARGS__)
+#define VGP_TRACEF(...) vgp::Logger::GetInstance()->TraceF(__VA_ARGS__)
+#define VGP_INFOF(...) vgp::Logger::GetInstance()->InfoF(__VA_ARGS__)
+#define VGP_WARNF(...) vgp::Logger::GetInstance()->WarnF(__VA_ARGS__)
+#define VGP_ERRORF(...) vgp::Logger::GetInstance()->ErrorF(__VA_ARGS__)
+#define VGP_FATALF(...) vgp::Logger::GetInstance()->FatalF(__VA_ARGS__)
 
-// Define a macro to create a logger_loc object with current source location
-#define VGP_LOG_LOC vgp::Logger::logger_loc{vgp::source_location{}}
-
-// Update the VGP_LOG macro
-#define VGP_LOG(level, ...) \
-  do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-    logger->Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
-    } \
-  } while(0)
-
-// Update the VGP_LOGF macro
-#define VGP_LOGF(level, ...) \
-  do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-    logger->Log(VGP_LOG_LOC, level, true, __VA_ARGS__); \
-    } \
-  } while(0)
-
-#define VGP_LOG_ARRAY(level, ptr, sz) \
-  do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->LogArray(VGP_LOG_LOC, level, false, ptr, sz); \
-    } \
-  } while(0)
-
-#define VGP_LOGF_ARRAY(level, ptr, sz) \
-  do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
-    } \
-  } while(0)
-
-// Update the compile-time macros
-
-#ifdef CPP17_OR_GREATER
-#define VGP_CLOG(level, ...) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
-    }\
-    } \
-  } while (0)
-
-#define VGP_CLOGF(level, ...) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->Log(VGP_LOG_LOC, level, true, __VA_ARGS__); \
-    } \
-    } \
-  } while (0)
-
-#define VGP_CLOGF_ARRAY(level, ptr, sz) \
-  do { \
-    if constexpr (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
-    } \
-    } \
-  } while (0)
-#else
-#define VGP_CLOG(level, ...) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->Log(VGP_LOG_LOC, level, false, __VA_ARGS__); \
-    } \
-    } \
-  } while (0)
-
-#define VGP_CLOGF(level, ...) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->Log(VGP_LOG_LOC, level, true,  __VA_ARGS__); \
-    } \
-    } \
-  } while (0)
-#define VGP_CLOGF_ARRAY(level, ptr, sz) \
-  do { \
-    if (static_cast<int>(level) <= VHLOGGER_COMPILE_LEVEL) { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->LogArray(VGP_LOG_LOC, level, true, ptr, sz); \
-    } \
-    } \
-  } while (0)
-#endif
-
-// Update the macros to use VGP_LOG_LOC
-#define VGP_TRACE(...)  do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Trace(VGP_LOG_LOC, false, __VA_ARGS__) \
-    } \
-} while(0)
-#define VGP_DEBUG(...)   do { \
-      logger->Debug(VGP_LOG_LOC, false, __VA_ARGS__); \
-} while(0)
-#define VGP_INFO(...) do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Trace(VGP_LOG_LOC, false, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_WARN(...)do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Warn(VGP_LOG_LOC, false, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_ERROR(...) do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Error(VGP_LOG_LOC, false, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_CRITICAL(...) do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Critical(VGP_LOG_LOC, false, __VA_ARGS__); \
-    } \
-} while(0)
-
-#define VGP_TRACEF(...)  do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Trace(VGP_LOG_LOC, true, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_DEBUGF(...)   do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-      logger->Debug(VGP_LOG_LOC, true, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_INFOF(...) do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Trace(VGP_LOG_LOC, true, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_WARNF(...)do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Warn(VGP_LOG_LOC, true, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_ERRORF(...) do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Error(VGP_LOG_LOC, true, __VA_ARGS__); \
-    } \
-} while(0)
-#define VGP_CRITICALF(...) do { \
-    if (auto logger = vgp::Logger::GetInstance()) { \
-  logger->Critical(VGP_LOG_LOC, true, __VA_ARGS__); \
-    } \
-} while(0)
+#define VGP_LOG_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(vgp::Logger::Level::level, ptr, size, false)
+#define VGP_LOG_ARRAY_F(level, ptr, size) vgp::Logger::GetInstance()->LogArray(vgp::Logger::Level::level, ptr, size, true)
 
 #endif  // VGP_VHLOGGER_H_

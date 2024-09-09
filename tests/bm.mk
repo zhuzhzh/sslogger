@@ -4,7 +4,8 @@ OBJ = test_bm
 LEVEL = 5
 
 LOGGER_HEADER = ../include/vhlogger/vhlogger.h
-LOGGER_SRCS = ../src/vhlogger.cc
+#LOGGER_SRCS = ../src/vhlogger.cc
+LOGGER_SRCS = 
 SRCS = benchmarks.cc ${LOGGER_SRCS}
 
 ZMQ_OPTS = -I${ZEROMQ_HOME}/include -L${ZEROMQ_HOME}/lib64 -lzmq 
@@ -21,6 +22,7 @@ build b : $(OBJ)
 $(OBJ): ${SRCS} ${LOGGER_HEADER}
 	g++ -g ${SRCS} \
 		${FMT_OPTS} \
+		${SPDLOG_OPTS} \
 		${OPTIONS} \
 		-o $@
 
