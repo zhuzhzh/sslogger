@@ -23,10 +23,13 @@
    "-I/home/public/fmt/include",
    "-L/home/public/fmt/lib64",
    "-lfmt",
+   "-DFMT_SHARED",
    "-I/home/public/spdlog/include",
    "-L/home/public/spdlog/lib64",
    "-lspdlog",
    "-DSPDLOG_COMPILED_LIB",
+   "-DSPDLOG_FMT_EXTERNAL",
+   "-DSPDLOG_SHARED_LIB",
    "-o",
    "exec"
   ],

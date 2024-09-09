@@ -3,6 +3,7 @@
 #define VGP_VHLOGGER_H_
 
 #include <spdlog/spdlog.h>
+#include <fmt/ranges.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/fmt/bin_to_hex.h>
@@ -71,6 +72,25 @@ namespace vgp {
     }
 
     template<typename... Args>
+    void Log(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
+        console_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+#ifdef VHLOGGER_ENABLE_CB
+        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+#endif
+    }
+
+    template<typename... Args>
+    void LogF(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
+        if (file_logger_) {
+            file_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+        }
+#ifdef VHLOGGER_ENABLE_CB
+        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+#endif
+    }
+
+
+    template<typename... Args>
       void Debug(const char* fmt, const Args&... args) {
         Log(VHLOGGER_DEBUG, fmt, args...);
       }
@@ -99,6 +119,16 @@ namespace vgp {
       void InfoF(const char* fmt, const Args&... args) {
         LogF(VHLOGGER_INFO, fmt, args...);
       }
+    
+    template<typename... Args>
+      void Warn(const char* fmt, const Args&... args) {
+        Log(VHLOGGER_WARN, fmt, args...);
+      }
+
+    template<typename... Args>
+      void WarnF(const char* fmt, const Args&... args) {
+        LogF(VHLOGGER_WARN, fmt, args...);
+      }
 
     template<typename... Args>
       void Error(const char* fmt, const Args&... args) {
@@ -119,8 +149,6 @@ namespace vgp {
       void FatalF(const char* fmt, const Args&... args) {
         Log(VHLOGGER_FATAL, fmt, args...);
       }
-
-    // Implement Trace, Info, Warn, Error, Fatal similarly...
 
     void LogArray(spdlog::level::level_enum level, const uint8_t* ptr, int size, bool to_file = false) {
       auto log_msg = fmt::format("Array data: {}", spdlog::to_hex(ptr, ptr + size));
@@ -229,7 +257,25 @@ namespace vgp {
 #define VGP_ERRORF(...) vgp::Logger::GetInstance()->ErrorF(__VA_ARGS__)
 #define VGP_FATALF(...) vgp::Logger::GetInstance()->FatalF(__VA_ARGS__)
 
-#define VGP_LOG_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(vgp::Logger::Level::level, ptr, size, false)
-#define VGP_LOG_ARRAY_F(level, ptr, size) vgp::Logger::GetInstance()->LogArray(vgp::Logger::Level::level, ptr, size, true)
+#define VGP_LOG_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, false)
+#define VGP_LOG_ARRAY_F(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, true)
+
+// Macro definitions
+#define VGP_LOG(level, ...) vgp::Logger::GetInstance()->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define VGP_LOGT(...) VGP_LOG(VHLOGGER_TRACE, __VA_ARGS__)
+#define VGP_LOGD(...) VGP_LOG(VHLOGGER_DEBUG, __VA_ARGS__)
+#define VGP_LOGI(...) VGP_LOG(VHLOGGER_INFO, __VA_ARGS__)
+#define VGP_LOGW(...) VGP_LOG(VHLOGGER_WARN, __VA_ARGS__)
+#define VGP_LOGE(...) VGP_LOG(VHLOGGER_ERROR, __VA_ARGS__)
+#define VGP_LOGF(...) VGP_LOG(VHLOGGER_FATAL, __VA_ARGS__)
+
+// File logging macros (if needed)
+#define VGP_LOG_F(level, ...) vgp::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define VGP_LOGFT(...) VGP_LOG_F(VHLOGGER_TRACE, __VA_ARGS__)
+#define VGP_LOGFD(...) VGP_LOG_F(VHLOGGER_DEBUG, __VA_ARGS__)
+#define VGP_LOGFI(...) VGP_LOG_F(VHLOGGER_INFO, __VA_ARGS__)
+#define VGP_LOGFW(...) VGP_LOG_F(VHLOGGER_WARN, __VA_ARGS__)
+#define VGP_LOGFE(...) VGP_LOG_F(VHLOGGER_ERROR, __VA_ARGS__)
+#define VGP_LOGFF(...) VGP_LOG_F(VHLOGGER_FATAL, __VA_ARGS__)
 
 #endif  // VGP_VHLOGGER_H_
