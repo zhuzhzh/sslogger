@@ -11,18 +11,24 @@
 #include <functional>
 #include <string>
 
+#define LOGLEVEL_TRACE    spdlog::level::trace
+#define LOGLEVEL_DEBUG    spdlog::level::debug
+#define LOGLEVEL_INFO     spdlog::level::info
+#define LOGLEVEL_WARN     spdlog::level::warn
+#define LOGLEVEL_ERROR    spdlog::level::err
+#define LOGLEVEL_FATAL spdlog::level::critical
+#define LOGLEVEL_OFF      spdlog::level::off
 
 namespace vgp {
 
   class Logger {
   public:
-    enum class Level { OFF = 0, FATAL = 1, ERROR, WARN, INFO, DEBUG, TRACE };
     enum class Format { kLite, kMedium, kFull };
 
     using CallbackFunction = std::function<void(const spdlog::details::log_msg&)>;
 
     struct CallbackCondition {
-      Level level = Level::OFF;
+      spdlog::level::level_enum level = LOGLEVEL_OFF;
       std::string file;
       int line = -1;
       std::string function;
@@ -40,9 +46,9 @@ namespace vgp {
       return *this;
     }
 
-    Logger& SetLogLevel(Level level) {
-      console_logger_->set_level(ConvertLevel(level));
-      if (file_logger_) file_logger_->set_level(ConvertLevel(level));
+    Logger& SetLogLevel(spdlog::level::level_enum level) {
+      console_logger_->set_level(level);
+      if (file_logger_) file_logger_->set_level(level);
       return *this;
     }
 
@@ -63,62 +69,62 @@ namespace vgp {
 
     template<typename... Args>
       void Debug(const char* fmt, const Args&... args) {
-        Log(Level::DEBUG, fmt, args...);
+        Log(LOGLEVEL_DEBUG, fmt, args...);
       }
 
     template<typename... Args>
       void DebugF(const char* fmt, const Args&... args) {
-        LogF(Level::DEBUG, fmt, args...);
+        LogF(LOGLEVEL_DEBUG, fmt, args...);
       }
 
     template<typename... Args>
       void Trace(const char* fmt, const Args&... args) {
-        Log(Level::TRACE, fmt, args...);
+        Log(LOGLEVEL_TRACE, fmt, args...);
       }
 
     template<typename... Args>
       void TraceF(const char* fmt, const Args&... args) {
-        LogF(Level::TRACE, fmt, args...);
+        LogF(LOGLEVEL_TRACE, fmt, args...);
       }
 
     template<typename... Args>
       void Info(const char* fmt, const Args&... args) {
-        Log(Level::INFO, fmt, args...);
+        Log(LOGLEVEL_INFO, fmt, args...);
       }
 
     template<typename... Args>
       void InfoF(const char* fmt, const Args&... args) {
-        LogF(Level::INFO, fmt, args...);
+        LogF(LOGLEVEL_INFO, fmt, args...);
       }
 
     template<typename... Args>
       void Error(const char* fmt, const Args&... args) {
-        Log(Level::ERROR, fmt, args...);
+        Log(LOGLEVEL_ERROR, fmt, args...);
       }
 
     template<typename... Args>
       void ErrorF(const char* fmt, const Args&... args) {
-        LogF(Level::ERROR, fmt, args...);
+        LogF(LOGLEVEL_ERROR, fmt, args...);
       }
 
     template<typename... Args>
       void Fatal(const char* fmt, const Args&... args) {
-        Log(Level::FATAL, fmt, args...);
+        Log(LOGLEVEL_FATAL, fmt, args...);
       }
 
     template<typename... Args>
       void FatalF(const char* fmt, const Args&... args) {
-        LogF(Level::FATAL, fmt, args...);
+        Log(LOGLEVEL_FATAL, fmt, args...);
       }
 
     // Implement Trace, Info, Warn, Error, Fatal similarly...
 
-    void LogArray(Level level, const uint8_t* ptr, int size, bool to_file = false) {
+    void LogArray(spdlog::level::level_enum level, const uint8_t* ptr, int size, bool to_file = false) {
       auto log_msg = fmt::format("Array data: {}", spdlog::to_hex(ptr, ptr + size));
       if (to_file && file_logger_) {
-        file_logger_->log(ConvertLevel(level), log_msg);
+        file_logger_->log(level, log_msg);
       } else {
-        console_logger_->log(ConvertLevel(level), log_msg);
+        console_logger_->log(level, log_msg);
       }
       TriggerCallbacks(level, "", -1, "", log_msg);
     }
@@ -138,36 +144,25 @@ namespace vgp {
       }
     }
 
-    spdlog::level::level_enum ConvertLevel(Level level) {
-      switch (level) {
-      case Level::TRACE: return spdlog::level::trace;
-      case Level::DEBUG: return spdlog::level::debug;
-      case Level::INFO: return spdlog::level::info;
-      case Level::WARN: return spdlog::level::warn;
-      case Level::ERROR: return spdlog::level::err;
-      case Level::FATAL: return spdlog::level::critical;
-      default: return spdlog::level::off;
-      }
-    }
 
     template<typename... Args>
-      void Log(Level level, const char* fmt, const Args&... args) {
-        console_logger_->log(ConvertLevel(level), fmt, args...);
+      void Log(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
+        console_logger_->log(level, fmt, args...);
         TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
       }
 
     template<typename... Args>
-      void LogF(Level level, const char* fmt, const Args&... args) {
+      void LogF(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
         if (file_logger_) {
-          file_logger_->log(ConvertLevel(level), fmt, args...);
+          file_logger_->log(level, fmt, args...);
           TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
         }
       }
 
-    void TriggerCallbacks(Level level, const std::string& file, int line,
+    void TriggerCallbacks(spdlog::level::level_enum level, const std::string& file, int line,
       const std::string& function, const std::string& message) {
       spdlog::details::log_msg msg;
-      msg.level = ConvertLevel(level);
+      msg.level = level;
       msg.time = std::chrono::system_clock::now();
       msg.source.filename = file.c_str();
       msg.source.line = line;
@@ -183,7 +178,7 @@ namespace vgp {
 
     bool MatchesCondition(const CallbackCondition& condition,
       const spdlog::details::log_msg& msg) {
-      if (condition.level != Level::OFF && ConvertLevel(condition.level) != msg.level) {
+      if (condition.level != LOGLEVEL_OFF && condition.level != msg.level) {
         return false;
       }
       if (!condition.file.empty() && msg.source.filename != condition.file) {
