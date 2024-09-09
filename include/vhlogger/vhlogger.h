@@ -155,7 +155,9 @@ namespace vgp {
       void LogF(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
         if (file_logger_) {
           file_logger_->log(level, fmt, args...);
+#ifdef VHLOGGER_ENABLE_CB
           TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+#endif
         }
       }
 
