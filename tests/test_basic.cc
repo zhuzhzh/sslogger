@@ -5,6 +5,7 @@ int main() {
     //vgp::Logger::Init();
 
     vgp::Logger* logger = vgp::Logger::GetInstance();
+    logger->SetLogFile("basic.log");
 
 
     // 记录一些日志

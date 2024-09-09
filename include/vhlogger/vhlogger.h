@@ -89,7 +89,6 @@ namespace vgp {
 #endif
     }
 
-
     template<typename... Args>
       void Debug(const char* fmt, const Args&... args) {
         Log(VHLOGGER_DEBUG, fmt, args...);
@@ -165,6 +164,10 @@ namespace vgp {
       console_sink_ = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
       console_logger_ = std::make_shared<spdlog::logger>("console", console_sink_);
       spdlog::set_default_logger(console_logger_);
+      SetupFromEnv();
+    }
+
+    void SetupFromEnv() {
     }
 
     void UpdateLoggers() {
@@ -174,7 +177,6 @@ namespace vgp {
         file_logger_->set_pattern(pattern_);
       }
     }
-
 
     template<typename... Args>
       void Log(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
@@ -243,39 +245,24 @@ namespace vgp {
 } // namespace vgp
 
 // Macro definitions
-#define VGP_DEBUG(...) vgp::Logger::GetInstance()->Debug(__VA_ARGS__)
-#define VGP_TRACE(...) vgp::Logger::GetInstance()->Trace(__VA_ARGS__)
-#define VGP_INFO(...) vgp::Logger::GetInstance()->Info(__VA_ARGS__)
-#define VGP_WARN(...) vgp::Logger::GetInstance()->Warn(__VA_ARGS__)
-#define VGP_ERROR(...) vgp::Logger::GetInstance()->Error(__VA_ARGS__)
-#define VGP_FATAL(...) vgp::Logger::GetInstance()->Fatal(__VA_ARGS__)
-
-#define VGP_DEBUGF(...) vgp::Logger::GetInstance()->DebugF(__VA_ARGS__)
-#define VGP_TRACEF(...) vgp::Logger::GetInstance()->TraceF(__VA_ARGS__)
-#define VGP_INFOF(...) vgp::Logger::GetInstance()->InfoF(__VA_ARGS__)
-#define VGP_WARNF(...) vgp::Logger::GetInstance()->WarnF(__VA_ARGS__)
-#define VGP_ERRORF(...) vgp::Logger::GetInstance()->ErrorF(__VA_ARGS__)
-#define VGP_FATALF(...) vgp::Logger::GetInstance()->FatalF(__VA_ARGS__)
-
 #define VGP_LOG_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, false)
 #define VGP_LOG_ARRAY_F(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, true)
 
-// Macro definitions
 #define VGP_LOG(level, ...) vgp::Logger::GetInstance()->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-#define VGP_LOGT(...) VGP_LOG(VHLOGGER_TRACE, __VA_ARGS__)
-#define VGP_LOGD(...) VGP_LOG(VHLOGGER_DEBUG, __VA_ARGS__)
-#define VGP_LOGI(...) VGP_LOG(VHLOGGER_INFO, __VA_ARGS__)
-#define VGP_LOGW(...) VGP_LOG(VHLOGGER_WARN, __VA_ARGS__)
-#define VGP_LOGE(...) VGP_LOG(VHLOGGER_ERROR, __VA_ARGS__)
-#define VGP_LOGF(...) VGP_LOG(VHLOGGER_FATAL, __VA_ARGS__)
+#define VGP_TRACE(...) VGP_LOG(VHLOGGER_TRACE, __VA_ARGS__)
+#define VGP_DEBUG(...) VGP_LOG(VHLOGGER_DEBUG, __VA_ARGS__)
+#define VGP_INFO(...) VGP_LOG(VHLOGGER_INFO, __VA_ARGS__)
+#define VGP_WARN(...) VGP_LOG(VHLOGGER_WARN, __VA_ARGS__)
+#define VGP_ERROR(...) VGP_LOG(VHLOGGER_ERROR, __VA_ARGS__)
+#define VGP_FATAL(...) VGP_LOG(VHLOGGER_FATAL, __VA_ARGS__)
 
 // File logging macros (if needed)
 #define VGP_LOG_F(level, ...) vgp::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-#define VGP_LOGFT(...) VGP_LOG_F(VHLOGGER_TRACE, __VA_ARGS__)
-#define VGP_LOGFD(...) VGP_LOG_F(VHLOGGER_DEBUG, __VA_ARGS__)
-#define VGP_LOGFI(...) VGP_LOG_F(VHLOGGER_INFO, __VA_ARGS__)
-#define VGP_LOGFW(...) VGP_LOG_F(VHLOGGER_WARN, __VA_ARGS__)
-#define VGP_LOGFE(...) VGP_LOG_F(VHLOGGER_ERROR, __VA_ARGS__)
-#define VGP_LOGFF(...) VGP_LOG_F(VHLOGGER_FATAL, __VA_ARGS__)
+#define VGP_TRACEF(...) VGP_LOG_F(VHLOGGER_TRACE, __VA_ARGS__)
+#define VGP_DEBUGF(...) VGP_LOG_F(VHLOGGER_DEBUG, __VA_ARGS__)
+#define VGP_INFOF(...) VGP_LOG_F(VHLOGGER_INFO, __VA_ARGS__)
+#define VGP_WARNF(...) VGP_LOG_F(VHLOGGER_WARN, __VA_ARGS__)
+#define VGP_ERRORF(...) VGP_LOG_F(VHLOGGER_ERROR, __VA_ARGS__)
+#define VGP_FATALF(...) VGP_LOG_F(VHLOGGER_FATAL, __VA_ARGS__)
 
 #endif  // VGP_VHLOGGER_H_
