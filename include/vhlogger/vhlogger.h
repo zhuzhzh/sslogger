@@ -2,6 +2,8 @@
 #ifndef VGP_VHLOGGER_H_
 #define VGP_VHLOGGER_H_
 
+#include <iostream>
+#include <ostream>
 #include <spdlog/spdlog.h>
 #include <fmt/ranges.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -168,6 +170,45 @@ namespace vgp {
     }
 
     void SetupFromEnv() {
+      const char* env_level = std::getenv("SSLN_LOG_LEVEL");
+      if (env_level) {
+        current_level_ = ParseLogLevel(env_level);
+      } else {
+        current_level_ = VHLOGGER_INFO
+      }
+      const char* env_logfile = std::getenv("SSLN_LOG_FILE");
+      if (env_logfile) {
+        SetLogFile(env_logfile);
+      }
+
+      const char* env_format = std::getenv("SSLN_LOG_FORMAT");
+      if (env_format) {
+        int format_value = std::atoi(env_format);
+        switch (format_value) {
+        case 0:
+          SetFormat(Format::kLite);
+          break;
+        case 1:
+          SetFormat(Format::kLow);
+          break;
+        case 2:
+          SetFormat(Format::kMedium);
+          break;
+        case 3:
+          SetFormat(Format::kHigh);
+          break;
+        case 4:
+          SetFormat(Format::kUltra);
+          break;
+        default:
+          std::cerr << "Invalid format value in SSLN_LOG_FORMAT: " << format_value
+            << ". Using default format (kLite)." << std::endl;
+          SetFormat(Format::kLite);
+          break;
+        }
+      } else {
+        SetFormat(Format::kLite);
+      }
     }
 
     void UpdateLoggers() {
