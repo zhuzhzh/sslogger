@@ -4,6 +4,8 @@
 
 #include <iostream>
 #include <ostream>
+#include <algorithm>
+#include <tl/optional.hpp>
 #include <spdlog/spdlog.h>
 #include <fmt/ranges.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -26,16 +28,16 @@ namespace vgp {
 
   class Logger {
   public:
-    enum class Format { kLite, kLow, kMedium, kHigh, kFull, kUltra};
+    enum class Verbose { kLite, kLow, kMedium, kHigh, kFull, kUltra};
 
     using CallbackFunction = std::function<void(const spdlog::details::log_msg&)>;
 
     struct CallbackCondition {
       spdlog::level::level_enum level = VHLOGGER_OFF;
-      std::string file;
-      int line = -1;
-      std::string function;
-      std::string message;
+      tl::optional<std::string> file;  // 使用tl::optional表示可选项
+      tl::optional<int> line;
+      tl::optional<std::string> function;
+      tl::optional<std::string> message;
     };
 
     static Logger* GetInstance() {
@@ -43,26 +45,28 @@ namespace vgp {
       return &instance;
     }
 
-    Logger& SetLogFile(const std::string& filename, bool append = false) {
-      file_sink_ = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename, append);
+    Logger& SetFile(const std::string& filename, bool truncate = true) {
+      filename_ = filename;
+      file_sink_ = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename,truncate);
       UpdateLoggers();
       return *this;
     }
 
-    Logger& SetLogLevel(spdlog::level::level_enum level) {
+    Logger& SetLevel(spdlog::level::level_enum level) {
+      level_ = level;
       console_logger_->set_level(level);
       if (file_logger_) file_logger_->set_level(level);
       return *this;
     }
 
-    Logger& SetFormat(Format format) {
-      switch (format) {
-      case Format::kLite: pattern_ = "%v"; break;
-      case Format::kLow: pattern_ = "[%H:%M:%S.%f] %v"; break;
-      case Format::kMedium: pattern_ = "[%H:%M:%S.%f][%^%L%$][%@] %v"; break;
-      case Format::kHigh: pattern_ = "[%H:%M:%S.%f][%^%L%$][thread %t][%@] %v"; break;
-      case Format::kFull: pattern_ = "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][thread %t][%!][%#] %v"; break;
-      case Format::kUltra: pattern_ = "[%Y-%m-%d %H:%M:%S.%F][%^%L%$][thread %t][%!][%@] %v"; break;
+    Logger& SetVerbose(Verbose ver) {
+      switch (ver) {
+      case Verbose::kLite: pattern_ = "%v"; break;
+      case Verbose::kLow: pattern_ = "[%H:%M:%S.%f] %v"; break;
+      case Verbose::kMedium: pattern_ = "[%H:%M:%S.%f][%^%L%$][%@] %v"; break;
+      case Verbose::kHigh: pattern_ = "[%H:%M:%S.%f][%^%L%$][thread %t][%@] %v"; break;
+      case Verbose::kFull: pattern_ = "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][thread %t][%!][%#] %v"; break;
+      case Verbose::kUltra: pattern_ = "[%Y-%m-%d %H:%M:%S.%F][%^%L%$][thread %t][%!][%@] %v"; break;
       }
       console_logger_->set_pattern(pattern_);
       if (file_logger_) file_logger_->set_pattern(pattern_);
@@ -172,49 +176,71 @@ namespace vgp {
     void SetupFromEnv() {
       const char* env_level = std::getenv("SSLN_LOG_LEVEL");
       if (env_level) {
-        current_level_ = ParseLogLevel(env_level);
+        level_ = ParseLogLevel(env_level);
       } else {
-        current_level_ = VHLOGGER_INFO
+        level_ = VHLOGGER_INFO;
       }
-      const char* env_logfile = std::getenv("SSLN_LOG_FILE");
-      if (env_logfile) {
-        SetLogFile(env_logfile);
-      }
+      SetLevel(level_);
 
-      const char* env_format = std::getenv("SSLN_LOG_FORMAT");
-      if (env_format) {
-        int format_value = std::atoi(env_format);
-        switch (format_value) {
+      const char* env_verbose = std::getenv("SSLN_LOG_VERBOSE");
+      if (env_verbose) {
+        int verbose_value = std::atoi(env_verbose);
+        switch (verbose_value) {
         case 0:
-          SetFormat(Format::kLite);
+          verbose_ = Verbose::kLite;
           break;
         case 1:
-          SetFormat(Format::kLow);
+          verbose_ = Verbose::kLow;
           break;
         case 2:
-          SetFormat(Format::kMedium);
+          verbose_ = Verbose::kMedium;
           break;
         case 3:
-          SetFormat(Format::kHigh);
+          verbose_ = Verbose::kHigh;
           break;
         case 4:
-          SetFormat(Format::kUltra);
+          verbose_ = Verbose::kUltra;
           break;
         default:
-          std::cerr << "Invalid format value in SSLN_LOG_FORMAT: " << format_value
-            << ". Using default format (kLite)." << std::endl;
-          SetFormat(Format::kLite);
+          std::cerr << "Invalid Verbose value in SSLN_LOG_VERBOSE: " << verbose_value
+            << ". Using default verbose (kLite)." << std::endl;
+          verbose_ = Verbose::kLite;
           break;
         }
       } else {
-        SetFormat(Format::kLite);
+        verbose_ = Verbose::kLite;
+      }
+      SetVerbose(verbose_);
+
+      const char* env_logfile = std::getenv("SSLN_LOG_FILE");
+      if (env_logfile) {
+        SetFile(env_logfile);
       }
     }
+
+    spdlog::level::level_enum ParseLogLevel(const std::string& level) {
+    // Convert to uppercase for case-insensitive comparison
+    std::string upper_level = level;
+    std::transform(upper_level.begin(), upper_level.end(), upper_level.begin(), ::toupper);
+
+    if (upper_level == "OFF" || upper_level == "6") return VHLOGGER_OFF;
+    if (upper_level == "FATAL" || upper_level == "5") return VHLOGGER_FATAL;
+    if (upper_level == "ERROR" || upper_level == "4") return VHLOGGER_ERROR;
+    if (upper_level == "WARN" || upper_level == "3") return VHLOGGER_WARN;
+    if (upper_level == "INFO" || upper_level == "2") return VHLOGGER_INFO;
+    if (upper_level == "DEBUG" || upper_level == "1") return VHLOGGER_DEBUG;
+    if (upper_level == "TRACE" || upper_level == "0") return VHLOGGER_TRACE;
+
+    // If we get here, the input was invalid. Log a warning and return the default level.
+    std::cerr << "Invalid log level: " << level << ". Using default level (INFO)." << std::endl;
+
+    return spdlog::level::info;
+  }
 
     void UpdateLoggers() {
       if (file_sink_) {
         file_logger_ = std::make_shared<spdlog::logger>("file_logger", file_sink_);
-        file_logger_->set_level(console_logger_->level());
+        file_logger_->set_level(level_);
         file_logger_->set_pattern(pattern_);
       }
     }
@@ -254,23 +280,32 @@ namespace vgp {
       }
     }
 
-    bool MatchesCondition(const CallbackCondition& condition,
-      const spdlog::details::log_msg& msg) {
+    bool MatchesCondition(const CallbackCondition& condition, const spdlog::details::log_msg& msg) {
+      // 如果 level 被设置，则必须匹配
       if (condition.level != VHLOGGER_OFF && condition.level != msg.level) {
         return false;
       }
-      if (!condition.file.empty() && msg.source.filename != condition.file) {
+
+      // 如果 file 被设置，则必须匹配
+      if (condition.file.has_value() && msg.source.filename != condition.file.value()) {
         return false;
       }
-      if (condition.line != -1 && msg.source.line != condition.line) {
+
+      // 如果 line 被设置，则必须匹配
+      if (condition.line.has_value() && msg.source.line != condition.line.value()) {
         return false;
       }
-      if (!condition.function.empty() && msg.source.funcname != condition.function) {
+
+      // 如果 function 被设置，则必须匹配
+      if (condition.function.has_value() && msg.source.funcname != condition.function.value()) {
         return false;
       }
-      if (!condition.message.empty() && msg.payload.compare(condition.message) == std::string::npos) {
+
+      // 如果 message 被设置，则必须包含在日志消息中
+      if (condition.message.has_value() && std::string(msg.payload.data(), msg.payload.size()).find(condition.message.value()) == std::string::npos) {
         return false;
       }
+
       return true;
     }
 
@@ -279,6 +314,9 @@ namespace vgp {
     std::shared_ptr<spdlog::logger> console_logger_;
     std::shared_ptr<spdlog::logger> file_logger_;
     std::string pattern_;
+    Verbose verbose_;
+    spdlog::level::level_enum level_;
+    std::string filename_;
     std::vector<std::pair<CallbackCondition, CallbackFunction>> callbacks_;
 
   };

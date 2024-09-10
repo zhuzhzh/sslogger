@@ -9,8 +9,8 @@ void test_callback() {
     auto logger = vgp::Logger::GetInstance();
     
     // 设置日志级别和格式
-    logger->SetLogLevel(VHLOGGER_DEBUG)
-          .SetFormat(vgp::Logger::Format::kMedium);
+    logger->SetLevel(VHLOGGER_DEBUG)
+          .SetVerbose(vgp::Logger::Verbose::kMedium);
 
     // 用于测试的回调函数
     bool callback_triggered = false;

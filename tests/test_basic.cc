@@ -5,7 +5,7 @@ int main() {
     //vgp::Logger::Init();
 
     vgp::Logger* logger = vgp::Logger::GetInstance();
-    logger->SetLogFile("basic.log");
+    logger->SetFile("basic.log");
 
 
     // 记录一些日志
@@ -19,22 +19,22 @@ int main() {
 
 
     // 切换到带时间的格式
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kMedium);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kMedium);
     std::vector<int> arr = {1,2,3,4};
     VGP_DEBUG("5 This is a debug message with time: {}", arr);
     VGP_INFO("4 This is a info message with time");
     VGP_ERROR("2 This is a error message with time");
 
     // 切换到默认格式
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kFull);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kFull);
     VGP_FATAL("1 This is an fatal message with default format");
     VGP_INFO("56, This is an info message with full format");
 
     // 将日志输出重定向到文件，并使用只有消息的格式
     //Logger::GetInstance().SetLogFile("app.log", true);
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kLite);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kLite);
     VGP_ERRORF("2 This is a error message in file");
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kMedium);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kMedium);
     VGP_DEBUGF("5 This is a debug message in file with time");
     VGP_INFOF("4 This is a info message in file with time");
     VGP_WARNF("2 This is a warn message in file with time");
@@ -61,15 +61,15 @@ int main() {
                   0x34, 0x45, 0x56 };
     size_t size1 = sizeof(data1);
 
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kFull);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kFull);
     VGP_LOG_ARRAY(VHLOGGER_DEBUG, data1, size1);
 
     VGP_WARNF("This is a warn message with time in file or console");
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kLite);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kLite);
     VGP_DEBUGF("1 This is a debug message with time in file or console with lite format");
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kMedium);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kMedium);
     VGP_DEBUGF("2 This is a debug message with time in file or console with lite format");
-    vgp::Logger::GetInstance()->SetFormat(vgp::Logger::Format::kFull);
+    vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kFull);
     VGP_DEBUGF("3 This is a debug message with time in file or console with lite format");
 
     //vgp::Logger::Shutdown();
