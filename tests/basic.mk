@@ -1,6 +1,6 @@
 EXEC = exec
 
-OBJ = test_basic
+OBJ = basic_tester
 LEVEL = 5
 
 LOGGER_HEADER = ../include/vhlogger/vhlogger.h

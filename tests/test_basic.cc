@@ -2,8 +2,6 @@
 
 int main() {
 
-    //vgp::Logger::Init();
-
     vgp::Logger* logger = vgp::Logger::GetInstance();
     logger->SetFile("basic.log");
 
@@ -72,6 +70,5 @@ int main() {
     vgp::Logger::GetInstance()->SetVerbose(vgp::Logger::Verbose::kFull);
     VGP_DEBUGF("3 This is a debug message with time in file or console with lite format");
 
-    //vgp::Logger::Shutdown();
     return 0;
 }

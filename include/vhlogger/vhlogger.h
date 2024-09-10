@@ -10,11 +10,15 @@
 #include <fmt/ranges.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/async.h>
+#include <spdlog/async_logger.h>
+#include <spdlog/sinks/daily_file_sink.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <memory>
 #include <vector>
 #include <functional>
 #include <string>
+#include <unordered_map>
 
 #define VHLOGGER_TRACE    spdlog::level::trace
 #define VHLOGGER_DEBUG    spdlog::level::debug
@@ -52,10 +56,16 @@ namespace vgp {
       return *this;
     }
 
+    Logger& SetAsyncMode(bool async_mode) {
+      async_mode_ = async_mode;
+      UpdateLoggers();
+      return *this;
+    }
+
+
     Logger& SetLevel(spdlog::level::level_enum level) {
       level_ = level;
-      console_logger_->set_level(level);
-      if (file_logger_) file_logger_->set_level(level);
+      UpdateLoggers();
       return *this;
     }
 
@@ -68,8 +78,19 @@ namespace vgp {
       case Verbose::kFull: pattern_ = "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][thread %t][%!][%#] %v"; break;
       case Verbose::kUltra: pattern_ = "[%Y-%m-%d %H:%M:%S.%F][%^%L%$][thread %t][%!][%@] %v"; break;
       }
-      console_logger_->set_pattern(pattern_);
-      if (file_logger_) file_logger_->set_pattern(pattern_);
+      UpdateLoggers();
+      return *this;
+    }
+
+    Logger& AddLogger(const std::string& name, const std::string& filename, bool daily = false) {
+      if (daily) {
+        auto daily_sink = std::make_shared<spdlog::sinks::daily_file_sink_mt>(filename, 0, 0);
+        loggers_[name] = std::make_shared<spdlog::logger>(name, daily_sink);
+      } else {
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename);
+        loggers_[name] = std::make_shared<spdlog::logger>(name, file_sink);
+      }
+      UpdateLoggers();
       return *this;
     }
 
@@ -79,7 +100,11 @@ namespace vgp {
 
     template<typename... Args>
     void Log(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
+      if (async_mode_) {
+        async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+      } else {
         console_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+      }
 #ifdef VHLOGGER_ENABLE_CB
         TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
 #endif
@@ -87,78 +112,33 @@ namespace vgp {
 
     template<typename... Args>
     void LogF(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
-        if (file_logger_) {
-            file_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
-        }
+      if (async_mode_) {
+        async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+      } else {
+        sync_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+      }
 #ifdef VHLOGGER_ENABLE_CB
         TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
 #endif
     }
 
     template<typename... Args>
-      void Debug(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_DEBUG, fmt, args...);
+    void LogTo(const std::string& logger_name, spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
+      auto it = loggers_.find(logger_name);
+      if (it != loggers_.end()) {
+        it->second->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
       }
-
-    template<typename... Args>
-      void DebugF(const char* fmt, const Args&... args) {
-        LogF(VHLOGGER_DEBUG, fmt, args...);
-      }
-
-    template<typename... Args>
-      void Trace(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_TRACE, fmt, args...);
-      }
-
-    template<typename... Args>
-      void TraceF(const char* fmt, const Args&... args) {
-        LogF(VHLOGGER_TRACE, fmt, args...);
-      }
-
-    template<typename... Args>
-      void Info(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_INFO, fmt, args...);
-      }
-
-    template<typename... Args>
-      void InfoF(const char* fmt, const Args&... args) {
-        LogF(VHLOGGER_INFO, fmt, args...);
-      }
-    
-    template<typename... Args>
-      void Warn(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_WARN, fmt, args...);
-      }
-
-    template<typename... Args>
-      void WarnF(const char* fmt, const Args&... args) {
-        LogF(VHLOGGER_WARN, fmt, args...);
-      }
-
-    template<typename... Args>
-      void Error(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_ERROR, fmt, args...);
-      }
-
-    template<typename... Args>
-      void ErrorF(const char* fmt, const Args&... args) {
-        LogF(VHLOGGER_ERROR, fmt, args...);
-      }
-
-    template<typename... Args>
-      void Fatal(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_FATAL, fmt, args...);
-      }
-
-    template<typename... Args>
-      void FatalF(const char* fmt, const Args&... args) {
-        Log(VHLOGGER_FATAL, fmt, args...);
-      }
+#ifdef VHLOGGER_ENABLE_CB
+        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+#endif
+    }
 
     void LogArray(spdlog::level::level_enum level, const uint8_t* ptr, int size, bool to_file = false) {
       auto log_msg = fmt::format("Array data: {}", spdlog::to_hex(ptr, ptr + size));
-      if (to_file && file_logger_) {
-        file_logger_->log(level, log_msg);
+      if (to_file && !loggers_.empty()) {
+        loggers_.begin()->second->log(level, log_msg);
+      } else if (async_mode_) {
+        async_logger_->log(level, log_msg);
       } else {
         console_logger_->log(level, log_msg);
       }
@@ -166,11 +146,12 @@ namespace vgp {
     }
 
   private:
-    Logger() {
+    Logger():async_mode_(false) {
       console_sink_ = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
       console_logger_ = std::make_shared<spdlog::logger>("console", console_sink_);
       spdlog::set_default_logger(console_logger_);
       SetupFromEnv();
+      UpdateLoggers();
     }
 
     void SetupFromEnv() {
@@ -216,6 +197,11 @@ namespace vgp {
       if (env_logfile) {
         SetFile(env_logfile);
       }
+
+      const char* env_async = std::getenv("SSLN_LOG_ASYNC");
+      if (env_async) {
+        SetAsyncMode(std::string(env_async) == "1" || std::string(env_async) == "true");
+      }
     }
 
     spdlog::level::level_enum ParseLogLevel(const std::string& level) {
@@ -237,31 +223,39 @@ namespace vgp {
     return spdlog::level::info;
   }
 
-    void UpdateLoggers() {
-      if (file_sink_) {
-        file_logger_ = std::make_shared<spdlog::logger>("file_logger", file_sink_);
-        file_logger_->set_level(level_);
-        file_logger_->set_pattern(pattern_);
-      }
-    }
-
-    template<typename... Args>
-      void Log(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
-        console_logger_->log(level, fmt, args...);
-#ifdef VHLOGGER_ENABLE_CB
-        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
-#endif
-      }
-
-    template<typename... Args>
-      void LogF(spdlog::level::level_enum level, const char* fmt, const Args&... args) {
-        if (file_logger_) {
-          file_logger_->log(level, fmt, args...);
-#ifdef VHLOGGER_ENABLE_CB
-          TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
-#endif
+    template<typename LoggerType>
+      void UpdateLogger(std::shared_ptr<LoggerType>& logger) {
+        if (logger) {
+          logger->set_level(level_);
+          logger->set_pattern(pattern_);
         }
       }
+
+    void UpdateLoggers() {
+      if (file_sink_) {
+        if (async_mode_) {
+          if (!async_logger_) {
+            spdlog::init_thread_pool(8192, 1);
+            async_logger_ = std::make_shared<spdlog::async_logger>("async_logger", file_sink_, 
+              spdlog::thread_pool(), spdlog::async_overflow_policy::block);
+            spdlog::register_logger(async_logger_);
+          }
+          UpdateLogger(async_logger_);
+        } else {
+          if (!sync_logger_) {
+            sync_logger_ = std::make_shared<spdlog::logger>("sync_logger", file_sink_);
+            spdlog::register_logger(sync_logger_);
+          }
+          UpdateLogger(sync_logger_);
+        }
+      }
+
+      UpdateLogger(console_logger_);
+
+      for (auto& logger_pair : loggers_) {
+        UpdateLogger(logger_pair.second);
+      }
+    }
 
     void TriggerCallbacks(spdlog::level::level_enum level, const std::string& file, int line,
       const std::string& function, const std::string& message) {
@@ -285,40 +279,37 @@ namespace vgp {
       if (condition.level != VHLOGGER_OFF && condition.level != msg.level) {
         return false;
       }
-
       // 如果 file 被设置，则必须匹配
       if (condition.file.has_value() && msg.source.filename != condition.file.value()) {
         return false;
       }
-
       // 如果 line 被设置，则必须匹配
       if (condition.line.has_value() && msg.source.line != condition.line.value()) {
         return false;
       }
-
       // 如果 function 被设置，则必须匹配
       if (condition.function.has_value() && msg.source.funcname != condition.function.value()) {
         return false;
       }
-
       // 如果 message 被设置，则必须包含在日志消息中
       if (condition.message.has_value() && std::string(msg.payload.data(), msg.payload.size()).find(condition.message.value()) == std::string::npos) {
         return false;
       }
-
       return true;
     }
 
     std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink_;
     std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink_;
     std::shared_ptr<spdlog::logger> console_logger_;
-    std::shared_ptr<spdlog::logger> file_logger_;
+    std::shared_ptr<spdlog::logger> sync_logger_;
+    std::shared_ptr<spdlog::async_logger> async_logger_;
+    std::unordered_map<std::string, std::shared_ptr<spdlog::logger>> loggers_;
     std::string pattern_;
     Verbose verbose_;
     spdlog::level::level_enum level_;
     std::string filename_;
     std::vector<std::pair<CallbackCondition, CallbackFunction>> callbacks_;
-
+    bool async_mode_;
   };
 
 } // namespace vgp
@@ -336,6 +327,14 @@ namespace vgp {
 #define VGP_FATAL(...) VGP_LOG(VHLOGGER_FATAL, __VA_ARGS__)
 
 // File logging macros (if needed)
+#define VGP_LOG_TO(logger_name, level, ...) vgp::Logger::GetInstance()->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define VGP_TRACE_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_TRACE, __VA_ARGS__)
+#define VGP_DEBUG_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_DEBUG, __VA_ARGS__)
+#define VGP_INFO_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_INFO, __VA_ARGS__)
+#define VGP_WARN_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_WARN, __VA_ARGS__)
+#define VGP_ERROR_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_ERROR, __VA_ARGS__)
+#define VGP_FATAL_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_FATAL, __VA_ARGS__)
+
 #define VGP_LOG_F(level, ...) vgp::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define VGP_TRACEF(...) VGP_LOG_F(VHLOGGER_TRACE, __VA_ARGS__)
 #define VGP_DEBUGF(...) VGP_LOG_F(VHLOGGER_DEBUG, __VA_ARGS__)
