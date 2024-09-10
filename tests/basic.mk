@@ -4,8 +4,8 @@ OBJ = basic_tester
 LEVEL = 5
 
 LOGGER_HEADER = ../include/vhlogger/vhlogger.h
-#LOGGER_SRCS = ../src/vhlogger.cc
-LOGGER_SRCS = 
+LOGGER_SRCS = ../src/vhlogger.cc
+#LOGGER_SRCS = 
 SRCS = test_basic.cc 
 
 ZMQ_OPTS = -I${ZEROMQ_HOME}/include -L${ZEROMQ_HOME}/lib64 -lzmq 
@@ -19,7 +19,7 @@ OPTIONS = -pthread -I../include -std=c++14 -DVHLOGGER_COMPILE_LEVEL=${LEVEL}
 build b : $(OBJ)
 
 
-$(OBJ): ${SRCS} ${LOGGER_HEADER}
+$(OBJ): ${SRCS} ${LOGGER_SRCS} ${LOGGER_HEADER}
 	g++ -g ${SRCS} \
 		${LOGGER_SRCS} \
 		${FMT_OPTS} \

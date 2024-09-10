@@ -4,8 +4,8 @@ OBJ = bm_tester
 LEVEL = 5
 
 LOGGER_HEADER = ../include/vhlogger/vhlogger.h
-#LOGGER_SRCS = ../src/vhlogger.cc
-LOGGER_SRCS = 
+LOGGER_SRCS = ../src/vhlogger.cc
+#LOGGER_SRCS = 
 SRCS = benchmarks.cc ${LOGGER_SRCS}
 
 ZMQ_OPTS = -I${ZEROMQ_HOME}/include -L${ZEROMQ_HOME}/lib64 -lzmq 

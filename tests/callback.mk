@@ -4,8 +4,8 @@ OBJ = callback_tester
 LEVEL = 5
 
 LOGGER_HEADER = ../include/vhlogger/vhlogger.h
-#LOGGER_SRCS = ../src/vhlogger.cc
-LOGGER_SRCS = 
+LOGGER_SRCS = ../src/vhlogger.cc
+#LOGGER_SRCS = 
 SRCS = test_callback.cc 
 
 ZMQ_OPTS = -I${ZEROMQ_HOME}/include -L${ZEROMQ_HOME}/lib64 -lzmq 
