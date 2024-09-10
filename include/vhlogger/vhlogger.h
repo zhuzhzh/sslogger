@@ -132,7 +132,7 @@ namespace vgp {
 
 // Macro definitions
 #define VGP_LOG_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, false)
-#define VGP_LOG_ARRAY_F(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, true)
+#define VGP_LOGF_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, true)
 
 #define VGP_LOG(level, ...) vgp::Logger::GetInstance()->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define VGP_TRACE(...) VGP_LOG(VHLOGGER_TRACE, __VA_ARGS__)
