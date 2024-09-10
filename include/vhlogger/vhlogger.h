@@ -38,7 +38,7 @@ namespace vgp {
 
     struct CallbackCondition {
       spdlog::level::level_enum level = VHLOGGER_OFF;
-      tl::optional<std::string> file;  // 使用tl::optional表示可选项
+      tl::optional<std::string> file;  
       tl::optional<int> line;
       tl::optional<std::string> function;
       tl::optional<std::string> message;
@@ -100,25 +100,29 @@ namespace vgp {
 
     template<typename... Args>
     void Log(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
-      if (async_mode_) {
+      if (async_mode_ && async_logger_) {
         async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
       } else {
         console_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
       }
 #ifdef VHLOGGER_ENABLE_CB
-        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+        TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
 #endif
     }
 
     template<typename... Args>
     void LogF(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
       if (async_mode_) {
-        async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+        if(async_logger_) {
+          async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+        }
       } else {
-        sync_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+        if (sync_logger_) {
+          sync_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
+        }
       }
 #ifdef VHLOGGER_ENABLE_CB
-        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+        TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
 #endif
     }
 
@@ -129,7 +133,7 @@ namespace vgp {
         it->second->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
       }
 #ifdef VHLOGGER_ENABLE_CB
-        TriggerCallbacks(level, "", -1, "", fmt::format(fmt, args...));
+        TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
 #endif
     }
 
@@ -257,14 +261,14 @@ namespace vgp {
       }
     }
 
-    void TriggerCallbacks(spdlog::level::level_enum level, const std::string& file, int line,
-      const std::string& function, const std::string& message) {
+    void TriggerCallbacks(spdlog::level::level_enum level, const char* file, int line,
+      const char* func, const std::string& message) {
       spdlog::details::log_msg msg;
       msg.level = level;
       msg.time = std::chrono::system_clock::now();
-      msg.source.filename = file.c_str();
+      msg.source.filename = file;
       msg.source.line = line;
-      msg.source.funcname = function.c_str();
+      msg.source.funcname = func;
       msg.payload = message;
 
       for (const auto& cb : callbacks_) {
@@ -275,23 +279,18 @@ namespace vgp {
     }
 
     bool MatchesCondition(const CallbackCondition& condition, const spdlog::details::log_msg& msg) {
-      // 如果 level 被设置，则必须匹配
       if (condition.level != VHLOGGER_OFF && condition.level != msg.level) {
         return false;
       }
-      // 如果 file 被设置，则必须匹配
       if (condition.file.has_value() && msg.source.filename != condition.file.value()) {
         return false;
       }
-      // 如果 line 被设置，则必须匹配
       if (condition.line.has_value() && msg.source.line != condition.line.value()) {
         return false;
       }
-      // 如果 function 被设置，则必须匹配
       if (condition.function.has_value() && msg.source.funcname != condition.function.value()) {
         return false;
       }
-      // 如果 message 被设置，则必须包含在日志消息中
       if (condition.message.has_value() && std::string(msg.payload.data(), msg.payload.size()).find(condition.message.value()) == std::string::npos) {
         return false;
       }
@@ -328,12 +327,12 @@ namespace vgp {
 
 // File logging macros (if needed)
 #define VGP_LOG_TO(logger_name, level, ...) vgp::Logger::GetInstance()->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-#define VGP_TRACE_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_TRACE, __VA_ARGS__)
-#define VGP_DEBUG_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_DEBUG, __VA_ARGS__)
-#define VGP_INFO_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_INFO, __VA_ARGS__)
-#define VGP_WARN_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_WARN, __VA_ARGS__)
-#define VGP_ERROR_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_ERROR, __VA_ARGS__)
-#define VGP_FATAL_TO(logger_name, ...) VGP_LOG__TO(logger_name, VHLOGGER_FATAL, __VA_ARGS__)
+#define VGP_TRACE_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_TRACE, __VA_ARGS__)
+#define VGP_DEBUG_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_DEBUG, __VA_ARGS__)
+#define VGP_INFO_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_INFO, __VA_ARGS__)
+#define VGP_WARN_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_WARN, __VA_ARGS__)
+#define VGP_ERROR_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_ERROR, __VA_ARGS__)
+#define VGP_FATAL_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_FATAL, __VA_ARGS__)
 
 #define VGP_LOG_F(level, ...) vgp::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define VGP_TRACEF(...) VGP_LOG_F(VHLOGGER_TRACE, __VA_ARGS__)
