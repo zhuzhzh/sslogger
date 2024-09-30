@@ -1,7 +1,7 @@
 PREFIX = /home/public/vgp
 SRC = ./src/vhlogger.cc 
-FMT_OPTS = -I${FMT_HOME}/include -L${FMT_HOME}/lib64 -lfmt
-SPDLOG_OPTS = -I${SPDLOG_HOME}/include -L${SPDLOG_HOME}/lib64 -lspdlog -DSPDLOG_FMT_EXTERNAL -DSPDLOG_COMPILED_LIB
+FMT_OPTS = -I${FMT_HOME}/include -L${FMT_HOME}/lib64 -Wl,-Bstatic -lfmt -Wl,-Bdynamic 
+SPDLOG_OPTS = -I${SPDLOG_HOME}/include -L${SPDLOG_HOME}/lib64 -Wl,-Bstatic -lspdlog -Wl,-Bdynamic -DSPDLOG_FMT_EXTERNAL -DSPDLOG_COMPILED_LIB
 HEADER = ./include/vhlogger/vhlogger.h
 OPTIONAL_HEADER = ./include/tl/optional.hpp
 STRING_VIEW_HEADER = ./include/nonstd/string_view.hpp

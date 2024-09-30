@@ -1,13 +1,13 @@
-#include "vhlogger/vhlogger.h"
+#include "ssln/sslogger.h"
 
 int main() {
-    vgp::Logger* logger = vgp::Logger::GetInstance();
+    ssln::Logger* logger = ssln::Logger::GetInstance();
 
-    logger->SetVerbose(vgp::Logger::Verbose::kMedium);
+    logger->SetVerbose(ssln::Logger::Verbose::kMedium);
     logger->SetLevel(spdlog::level::debug);
     logger->SetFile("bench.log");
     for (int i=0;i<1000000;i++) {
-        VGP_INFOF("1 This is a debug message with time in file or console with lite format");
+        SSLN_INFOF("1 This is a debug message with time in file or console with lite format");
     }
     return 0;
 }

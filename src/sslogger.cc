@@ -1,8 +1,8 @@
-#include "vhlogger/vhlogger.h"
+#include "ssln/sslogger.h"
 #include <spdlog/async.h>
 #include <spdlog/details/log_msg.h>
 
-namespace vgp {
+namespace ssln {
 
 Logger* Logger::GetInstance() {
   static Logger instance;
@@ -82,7 +82,7 @@ void Logger::SetupFromEnv() {
   if (env_level) {
     level_ = ParseLogLevel(env_level);
   } else {
-    level_ = VHLOGGER_INFO;
+    level_ = SSLOGGER_INFO;
   }
   SetLevel(level_);
 
@@ -132,13 +132,13 @@ spdlog::level::level_enum Logger::ParseLogLevel(const std::string& level) {
   std::string upper_level = level;
   std::transform(upper_level.begin(), upper_level.end(), upper_level.begin(), ::toupper);
 
-  if (upper_level == "OFF" || upper_level == "6") return VHLOGGER_OFF;
-  if (upper_level == "FATAL" || upper_level == "5") return VHLOGGER_FATAL;
-  if (upper_level == "ERROR" || upper_level == "4") return VHLOGGER_ERROR;
-  if (upper_level == "WARN" || upper_level == "3") return VHLOGGER_WARN;
-  if (upper_level == "INFO" || upper_level == "2") return VHLOGGER_INFO;
-  if (upper_level == "DEBUG" || upper_level == "1") return VHLOGGER_DEBUG;
-  if (upper_level == "TRACE" || upper_level == "0") return VHLOGGER_TRACE;
+  if (upper_level == "OFF" || upper_level == "6") return SSLOGGER_OFF;
+  if (upper_level == "FATAL" || upper_level == "5") return SSLOGGER_FATAL;
+  if (upper_level == "ERROR" || upper_level == "4") return SSLOGGER_ERROR;
+  if (upper_level == "WARN" || upper_level == "3") return SSLOGGER_WARN;
+  if (upper_level == "INFO" || upper_level == "2") return SSLOGGER_INFO;
+  if (upper_level == "DEBUG" || upper_level == "1") return SSLOGGER_DEBUG;
+  if (upper_level == "TRACE" || upper_level == "0") return SSLOGGER_TRACE;
 
   // If we get here, the input was invalid. Log a warning and return the default level.
   std::cerr << "Invalid log level: " << level << ". Using default level (INFO)." << std::endl;
@@ -198,7 +198,7 @@ void Logger::TriggerCallbacks(spdlog::level::level_enum level, const char* file,
 }
 
 bool Logger::MatchesCondition(const CallbackCondition& condition, const spdlog::details::log_msg& msg) {
-  if (condition.level != VHLOGGER_OFF && condition.level != msg.level) {
+  if (condition.level != SSLOGGER_OFF && condition.level != msg.level) {
     return false;
   }
   if (condition.file.has_value() && msg.source.filename != condition.file.value()) {
@@ -217,5 +217,5 @@ bool Logger::MatchesCondition(const CallbackCondition& condition, const spdlog::
 }
 
 
-} // namespace vgp
+} // namespace ssln
 

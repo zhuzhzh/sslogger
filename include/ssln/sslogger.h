@@ -1,6 +1,6 @@
-// vhlogger.h
-#ifndef VGP_VHLOGGER_H_
-#define VGP_VHLOGGER_H_
+// sslogger.h
+#ifndef SSLN_SSLOGGER_H_
+#define SSLN_SSLOGGER_H_
 
 #include <iostream>
 #include <ostream>
@@ -20,15 +20,15 @@
 #include <string>
 #include <unordered_map>
 
-#define VHLOGGER_TRACE    spdlog::level::trace
-#define VHLOGGER_DEBUG    spdlog::level::debug
-#define VHLOGGER_INFO     spdlog::level::info
-#define VHLOGGER_WARN     spdlog::level::warn
-#define VHLOGGER_ERROR    spdlog::level::err
-#define VHLOGGER_FATAL    spdlog::level::critical
-#define VHLOGGER_OFF      spdlog::level::off
+#define SSLOGGER_TRACE    spdlog::level::trace
+#define SSLOGGER_DEBUG    spdlog::level::debug
+#define SSLOGGER_INFO     spdlog::level::info
+#define SSLOGGER_WARN     spdlog::level::warn
+#define SSLOGGER_ERROR    spdlog::level::err
+#define SSLOGGER_FATAL    spdlog::level::critical
+#define SSLOGGER_OFF      spdlog::level::off
 
-namespace vgp {
+namespace ssln {
 
   class Logger {
   public:
@@ -37,7 +37,7 @@ namespace vgp {
     using CallbackFunction = std::function<void(const spdlog::details::log_msg&)>;
 
     struct CallbackCondition {
-      spdlog::level::level_enum level = VHLOGGER_OFF;
+      spdlog::level::level_enum level = SSLOGGER_OFF;
       tl::optional<std::string> file;  
       tl::optional<int> line;
       tl::optional<std::string> function;
@@ -62,7 +62,7 @@ namespace vgp {
         } else {
           console_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
         }
-#ifdef VHLOGGER_ENABLE_CB
+#ifdef SSLOGGER_ENABLE_CB
         TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
 #endif
       }
@@ -78,7 +78,7 @@ namespace vgp {
             sync_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
           }
         }
-#ifdef VHLOGGER_ENABLE_CB
+#ifdef SSLOGGER_ENABLE_CB
         TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
 #endif
       }
@@ -89,7 +89,7 @@ namespace vgp {
         if (it != loggers_.end()) {
           it->second->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
         }
-#ifdef VHLOGGER_ENABLE_CB
+#ifdef SSLOGGER_ENABLE_CB
         TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
 #endif
       }
@@ -131,32 +131,32 @@ namespace vgp {
 } // namespace vgp
 
 // Macro definitions
-#define VGP_LOG_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, false)
-#define VGP_LOGF_ARRAY(level, ptr, size) vgp::Logger::GetInstance()->LogArray(level, ptr, size, true)
+#define SSLN_LOG_ARRAY(level, ptr, size) ssln::Logger::GetInstance()->LogArray(level, ptr, size, false)
+#define SSLN_LOGF_ARRAY(level, ptr, size) ssln::Logger::GetInstance()->LogArray(level, ptr, size, true)
 
-#define VGP_LOG(level, ...) vgp::Logger::GetInstance()->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-#define VGP_TRACE(...) VGP_LOG(VHLOGGER_TRACE, __VA_ARGS__)
-#define VGP_DEBUG(...) VGP_LOG(VHLOGGER_DEBUG, __VA_ARGS__)
-#define VGP_INFO(...) VGP_LOG(VHLOGGER_INFO, __VA_ARGS__)
-#define VGP_WARN(...) VGP_LOG(VHLOGGER_WARN, __VA_ARGS__)
-#define VGP_ERROR(...) VGP_LOG(VHLOGGER_ERROR, __VA_ARGS__)
-#define VGP_FATAL(...) VGP_LOG(VHLOGGER_FATAL, __VA_ARGS__)
+#define SSLN_LOG(level, ...) ssln::Logger::GetInstance()->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define SSLN_TRACE(...) SSLN_LOG(SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUG(...) SSLN_LOG(SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFO(...) SSLN_LOG(SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARN(...) SSLN_LOG(SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERROR(...) SSLN_LOG(SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATAL(...) SSLN_LOG(SSLOGGER_FATAL, __VA_ARGS__)
 
 // File logging macros (if needed)
-#define VGP_LOG_TO(logger_name, level, ...) vgp::Logger::GetInstance()->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-#define VGP_TRACE_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_TRACE, __VA_ARGS__)
-#define VGP_DEBUG_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_DEBUG, __VA_ARGS__)
-#define VGP_INFO_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_INFO, __VA_ARGS__)
-#define VGP_WARN_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_WARN, __VA_ARGS__)
-#define VGP_ERROR_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_ERROR, __VA_ARGS__)
-#define VGP_FATAL_TO(logger_name, ...) VGP_LOG_TO(logger_name, VHLOGGER_FATAL, __VA_ARGS__)
+#define SSLN_LOG_TO(logger_name, level, ...) ssln::Logger::GetInstance()->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define SSLN_TRACE_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUG_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFO_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARN_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERROR_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATAL_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_FATAL, __VA_ARGS__)
 
-#define VGP_LOG_F(level, ...) vgp::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-#define VGP_TRACEF(...) VGP_LOG_F(VHLOGGER_TRACE, __VA_ARGS__)
-#define VGP_DEBUGF(...) VGP_LOG_F(VHLOGGER_DEBUG, __VA_ARGS__)
-#define VGP_INFOF(...) VGP_LOG_F(VHLOGGER_INFO, __VA_ARGS__)
-#define VGP_WARNF(...) VGP_LOG_F(VHLOGGER_WARN, __VA_ARGS__)
-#define VGP_ERRORF(...) VGP_LOG_F(VHLOGGER_ERROR, __VA_ARGS__)
-#define VGP_FATALF(...) VGP_LOG_F(VHLOGGER_FATAL, __VA_ARGS__)
+#define SSLN_LOG_F(level, ...) ssln::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define SSLN_TRACEF(...) SSLN_LOG_F(SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUGF(...) SSLN_LOG_F(SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFOF(...) SSLN_LOG_F(SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARNF(...) SSLN_LOG_F(SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERRORF(...) SSLN_LOG_F(SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATALF(...) SSLN_LOG_F(SSLOGGER_FATAL, __VA_ARGS__)
 
-#endif  // VGP_VHLOGGER_H_
+#endif  // SSLN_SSLOGGER_H_

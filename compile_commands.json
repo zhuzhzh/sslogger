@@ -1,6 +1,6 @@
 [
  {
-  "directory": "/trunk/branch/cpp/flatbuf/vhlogger",
+  "directory": "/trunk/branch/cpp/flatbuf/sslogger",
   "arguments": [
    "g++",
    "-g",
@@ -33,6 +33,6 @@
    "-o",
    "exec"
   ],
-  "file": "./src/vhlogger.cpp"
+  "file": "./src/sslogger.cc"
  }
 ]
