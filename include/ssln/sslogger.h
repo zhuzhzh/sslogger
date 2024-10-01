@@ -20,6 +20,15 @@
 #include <string>
 #include <unordered_map>
 
+// 在文件开头添加这些定义
+#define SSLOGGER_TRACE_INT    0
+#define SSLOGGER_DEBUG_INT    1
+#define SSLOGGER_INFO_INT     2
+#define SSLOGGER_WARN_INT     3
+#define SSLOGGER_ERROR_INT    4
+#define SSLOGGER_FATAL_INT    5
+#define SSLOGGER_OFF_INT      6
+
 #define SSLOGGER_TRACE    spdlog::level::trace
 #define SSLOGGER_DEBUG    spdlog::level::debug
 #define SSLOGGER_INFO     spdlog::level::info
@@ -27,6 +36,11 @@
 #define SSLOGGER_ERROR    spdlog::level::err
 #define SSLOGGER_FATAL    spdlog::level::critical
 #define SSLOGGER_OFF      spdlog::level::off
+
+#ifndef SSLN_ACTIVE_LEVEL
+#define SSLN_ACTIVE_LEVEL SSLOGGER_INFO_INT
+#endif
+
 
 namespace ssln {
 
@@ -158,5 +172,62 @@ namespace ssln {
 #define SSLN_WARNF(...) SSLN_LOG_F(SSLOGGER_WARN, __VA_ARGS__)
 #define SSLN_ERRORF(...) SSLN_LOG_F(SSLOGGER_ERROR, __VA_ARGS__)
 #define SSLN_FATALF(...) SSLN_LOG_F(SSLOGGER_FATAL, __VA_ARGS__)
+
+// compile time logging
+#define SSLN_LOGGER_CALL(level, ...) \
+    if (level >= SSLN_ACTIVE_LEVEL) SSLN_LOG(level, __VA_ARGS__)
+
+#define SSLN_LOGGER_CALL_F(level, ...) \
+    if (level >= SSLN_ACTIVE_LEVEL) SSLN_LOG_F(level, __VA_ARGS__)
+
+#define SSLN_TRACE_ENABLED() (SSLOGGER_TRACE_INT >= SSLN_ACTIVE_LEVEL)
+#define SSLN_DEBUG_ENABLED() (SSLOGGER_DEBUG_INT >= SSLN_ACTIVE_LEVEL)
+#define SSLN_INFO_ENABLED()  (SSLOGGER_INFO_INT >= SSLN_ACTIVE_LEVEL)
+#define SSLN_WARN_ENABLED()  (SSLOGGER_WARN_INT >= SSLN_ACTIVE_LEVEL)
+#define SSLN_ERROR_ENABLED() (SSLOGGER_ERROR_INT >= SSLN_ACTIVE_LEVEL)
+#define SSLN_FATAL_ENABLED() (SSLOGGER_FATAL_INT >= SSLN_ACTIVE_LEVEL)
+
+#define SSLN_TRACEF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUGF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFOF_CT(...)  SSLN_LOGGER_CALL_F(SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARNF_CT(...)  SSLN_LOGGER_CALL_F(SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERRORF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATALF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_FATAL, __VA_ARGS__)
+
+#if SSLN_ACTIVE_LEVEL <= SSLOGGER_TRACE_INT
+#define SSLN_TRACE_CT(...) SSLN_LOGGER_CALL(SSLOGGER_TRACE, __VA_ARGS__)
+#else
+#define SSLN_TRACE_CT(...) (void)0
+#endif
+
+#if SSLN_ACTIVE_LEVEL <= SSLOGGER_DEBUG_INT
+#define SSLN_DEBUG_CT(...) SSLN_LOGGER_CALL(SSLOGGER_DEBUG, __VA_ARGS__)
+#else
+#define SSLN_DEBUG_CT(...) (void)0
+#endif
+
+#if SSLN_ACTIVE_LEVEL <= SSLOGGER_INFO_INT
+#define SSLN_INFO_CT(...) SSLN_LOGGER_CALL(SSLOGGER_INFO, __VA_ARGS__)
+#else
+#define SSLN_INFO_CT(...) (void)0
+#endif
+
+#if SSLN_ACTIVE_LEVEL <= SSLOGGER_WARN_INT
+#define SSLN_WARN_CT(...) SSLN_LOGGER_CALL(SSLOGGER_WARN, __VA_ARGS__)
+#else
+#define SSLN_WARN_CT(...) (void)0
+#endif
+
+#if SSLN_ACTIVE_LEVEL <= SSLOGGER_ERROR_INT
+#define SSLN_ERROR_CT(...) SSLN_LOGGER_CALL(SSLOGGER_ERROR, __VA_ARGS__)
+#else
+#define SSLN_ERROR_CT(...) (void)0
+#endif
+
+#if SSLN_ACTIVE_LEVEL <= SSLOGGER_FATAL_INT
+#define SSLN_FATAL_CT(...) SSLN_LOGGER_CALL(SSLOGGER_FATAL, __VA_ARGS__)
+#else
+#define SSLN_FATAL_CT(...) (void)0
+#endif
 
 #endif  // SSLN_SSLOGGER_H_
