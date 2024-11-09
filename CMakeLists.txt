@@ -79,7 +79,8 @@ install(FILES ${HEADERS} DESTINATION include/ssln)
 
 # 安装可选头文件
 if(INSTALL_OPTIONAL_HEADERS)
-    install(FILES ${OPTIONAL_HEADERS} DESTINATION include)
+    install(DIRECTORY include/tl DESTINATION include)
+    install(DIRECTORY include/nonstd DESTINATION include)
 endif()
 
 # 导出目标
