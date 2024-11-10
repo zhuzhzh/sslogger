@@ -1,5 +1,6 @@
-#include <ssln/sslogger.h>
+#include "ssln/sslogger.h"
 
+using ssln::g_logger;
 
 int main(int argc, char *argv[])
 {

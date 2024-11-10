@@ -2,9 +2,6 @@
 #ifndef SSLN_SSLOGGER_H_
 #define SSLN_SSLOGGER_H_
 
-#include <iostream>
-#include <ostream>
-#include <algorithm>
 #include <tl/optional.hpp>
 #include <spdlog/spdlog.h>
 #include <fmt/ranges.h>
@@ -20,14 +17,7 @@
 #include <string>
 #include <unordered_map>
 
-// 在文件开头添加这些定义
-#define SSLOGGER_TRACE_INT    0
-#define SSLOGGER_DEBUG_INT    1
-#define SSLOGGER_INFO_INT     2
-#define SSLOGGER_WARN_INT     3
-#define SSLOGGER_ERROR_INT    4
-#define SSLOGGER_FATAL_INT    5
-#define SSLOGGER_OFF_INT      6
+
 
 #define SSLOGGER_TRACE    spdlog::level::trace
 #define SSLOGGER_DEBUG    spdlog::level::debug
@@ -37,12 +27,45 @@
 #define SSLOGGER_FATAL    spdlog::level::critical
 #define SSLOGGER_OFF      spdlog::level::off
 
+namespace ssln {
+
+// 删除原有的 INT 宏定义，改用枚举类
+enum class LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Fatal,
+    Off
+};
+
 #ifndef SSLN_ACTIVE_LEVEL
-#define SSLN_ACTIVE_LEVEL SSLOGGER_INFO_INT
+#define SSLN_ACTIVE_LEVEL ::ssln::LogLevel::Info
 #endif
 
+// 在编译时比较日志级别的模板
+template<LogLevel A, LogLevel B>
+constexpr bool LogLevelLE() {
+    return static_cast<int>(A) <= static_cast<int>(B);
+}
 
-namespace ssln {
+// 编译时日志级别检查宏
+#define SSLN_LEVEL_ENABLED(level) \
+    ::ssln::LogLevelLE<level, SSLN_ACTIVE_LEVEL>()
+
+constexpr spdlog::level::level_enum ToSpdLogLevel(LogLevel level) {
+    switch (level) {
+        case LogLevel::Trace: return SSLOGGER_TRACE;
+        case LogLevel::Debug: return SSLOGGER_DEBUG;
+        case LogLevel::Info:  return SSLOGGER_INFO;
+        case LogLevel::Warn:  return SSLOGGER_WARN;
+        case LogLevel::Error: return SSLOGGER_ERROR;
+        case LogLevel::Fatal: return SSLOGGER_FATAL;
+        case LogLevel::Off:   return SSLOGGER_OFF;
+        default:             return SSLOGGER_INFO;
+    }
+}
 
   class Logger {
   public:
@@ -58,7 +81,19 @@ namespace ssln {
       tl::optional<std::string> message;
     };
 
-    static Logger* GetInstance();
+    Logger();
+    ~Logger();
+
+    // 初始化函数
+    static void Init(const std::string& log_dir = ".", 
+                    const std::string& log_file = "",
+                    bool async_mode = false,
+                    spdlog::level::level_enum level = SSLOGGER_INFO,
+                    Verbose verbose = Verbose::kMedium,
+                    bool allow_env_override = true);
+
+    // 关闭函数
+    static void Shutdown();    
 
     Logger& SetFile(const std::string& filename, bool truncate = true);
     Logger& SetAsyncMode(bool async_mode);
@@ -71,7 +106,7 @@ namespace ssln {
 
     template<typename... Args>
       void Log(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
-        if (async_mode_ && async_logger_) {
+        if (config_.async_mode && async_logger_) {
           async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
         } else {
           console_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
@@ -83,7 +118,7 @@ namespace ssln {
 
     template<typename... Args>
       void LogF(spdlog::level::level_enum level, const char* file, int line, const char* func, const char* fmt, const Args&... args) {
-        if (async_mode_) {
+        if (config_.async_mode) {
           if(async_logger_) {
             async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
           }
@@ -112,11 +147,19 @@ namespace ssln {
     void LogArray(spdlog::level::level_enum level, const uint8_t* ptr, int size, bool to_file = false);
 
   private:
-    Logger();
-
-    void SetupFromEnv();
-
-    spdlog::level::level_enum ParseLogLevel(const std::string& level);
+    void LoadFromEnv();
+    
+    // 存储初始化配置
+    struct Config {
+        std::string log_dir = ".";
+        std::string log_file;
+        bool async_mode = false;
+        spdlog::level::level_enum level = SSLOGGER_INFO;
+        Verbose verbose = Verbose::kMedium;
+        std::string pattern_ = "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][%t][%@] %v";
+        bool allow_env_override = true;
+    };
+    Config config_;
 
     template<typename LoggerType>
       void UpdateLogger(std::shared_ptr<LoggerType>& logger);
@@ -134,21 +177,21 @@ namespace ssln {
     std::shared_ptr<spdlog::logger> sync_logger_;
     std::shared_ptr<spdlog::async_logger> async_logger_;
     std::unordered_map<std::string, std::shared_ptr<spdlog::logger>> loggers_;
-    std::string pattern_;
-    Verbose verbose_;
-    spdlog::level::level_enum level_;
-    std::string filename_;
+
     std::vector<std::pair<CallbackCondition, CallbackFunction>> callbacks_;
-    bool async_mode_;
   };
 
-} // namespace vgp
+extern ssln::Logger* g_logger;
+
+} // namespace ssln
+
 
 // Macro definitions
-#define SSLN_LOG_ARRAY(level, ptr, size) ssln::Logger::GetInstance()->LogArray(level, ptr, size, false)
-#define SSLN_LOGF_ARRAY(level, ptr, size) ssln::Logger::GetInstance()->LogArray(level, ptr, size, true)
+#define SSLN_LOG_ARRAY(level, ptr, size) ssln::g_logger->LogArray(level, ptr, size, false)
+#define SSLN_LOGF_ARRAY(level, ptr, size) ssln::g_logger->LogArray(level, ptr, size, true)
 
-#define SSLN_LOG(level, ...) ssln::Logger::GetInstance()->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define SSLN_LOG(level, ...) \
+  if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define SSLN_TRACE(...) SSLN_LOG(SSLOGGER_TRACE, __VA_ARGS__)
 #define SSLN_DEBUG(...) SSLN_LOG(SSLOGGER_DEBUG, __VA_ARGS__)
 #define SSLN_INFO(...) SSLN_LOG(SSLOGGER_INFO, __VA_ARGS__)
@@ -157,7 +200,8 @@ namespace ssln {
 #define SSLN_FATAL(...) SSLN_LOG(SSLOGGER_FATAL, __VA_ARGS__)
 
 // File logging macros (if needed)
-#define SSLN_LOG_TO(logger_name, level, ...) ssln::Logger::GetInstance()->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define SSLN_LOG_TO(logger_name, level, ...) \
+  if (ssln::g_logger) ssln::g_logger->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define SSLN_TRACE_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_TRACE, __VA_ARGS__)
 #define SSLN_DEBUG_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_DEBUG, __VA_ARGS__)
 #define SSLN_INFO_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_INFO, __VA_ARGS__)
@@ -165,7 +209,8 @@ namespace ssln {
 #define SSLN_ERROR_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_ERROR, __VA_ARGS__)
 #define SSLN_FATAL_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_FATAL, __VA_ARGS__)
 
-#define SSLN_LOG_F(level, ...) ssln::Logger::GetInstance()->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define SSLN_LOG_F(level, ...) \
+  if (ssln::g_logger) ssln::g_logger->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define SSLN_TRACEF(...) SSLN_LOG_F(SSLOGGER_TRACE, __VA_ARGS__)
 #define SSLN_DEBUGF(...) SSLN_LOG_F(SSLOGGER_DEBUG, __VA_ARGS__)
 #define SSLN_INFOF(...) SSLN_LOG_F(SSLOGGER_INFO, __VA_ARGS__)
@@ -175,17 +220,17 @@ namespace ssln {
 
 // compile time logging
 #define SSLN_LOGGER_CALL(level, ...) \
-    if (level >= SSLN_ACTIVE_LEVEL) SSLN_LOG(level, __VA_ARGS__)
+    if constexpr (SSLN_LEVEL_ENABLED(level)) SSLN_LOG(ToSpdLogLevel(level), __VA_ARGS__)
 
 #define SSLN_LOGGER_CALL_F(level, ...) \
-    if (level >= SSLN_ACTIVE_LEVEL) SSLN_LOG_F(level, __VA_ARGS__)
+    if constexpr (SSLN_LEVEL_ENABLED(level)) SSLN_LOG_F(ToSpdLogLevel(level), __VA_ARGS__)
 
-#define SSLN_TRACE_ENABLED() (SSLOGGER_TRACE_INT >= SSLN_ACTIVE_LEVEL)
-#define SSLN_DEBUG_ENABLED() (SSLOGGER_DEBUG_INT >= SSLN_ACTIVE_LEVEL)
-#define SSLN_INFO_ENABLED()  (SSLOGGER_INFO_INT >= SSLN_ACTIVE_LEVEL)
-#define SSLN_WARN_ENABLED()  (SSLOGGER_WARN_INT >= SSLN_ACTIVE_LEVEL)
-#define SSLN_ERROR_ENABLED() (SSLOGGER_ERROR_INT >= SSLN_ACTIVE_LEVEL)
-#define SSLN_FATAL_ENABLED() (SSLOGGER_FATAL_INT >= SSLN_ACTIVE_LEVEL)
+#define SSLN_TRACE_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Trace)
+#define SSLN_DEBUG_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Debug)
+#define SSLN_INFO_ENABLED()  SSLN_LEVEL_ENABLED(::ssln::LogLevel::Info)
+#define SSLN_WARN_ENABLED()  SSLN_LEVEL_ENABLED(::ssln::LogLevel::Warn)
+#define SSLN_ERROR_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Error)
+#define SSLN_FATAL_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Fatal)
 
 #define SSLN_TRACEF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_TRACE, __VA_ARGS__)
 #define SSLN_DEBUGF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_DEBUG, __VA_ARGS__)
@@ -194,40 +239,22 @@ namespace ssln {
 #define SSLN_ERRORF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_ERROR, __VA_ARGS__)
 #define SSLN_FATALF_CT(...) SSLN_LOGGER_CALL_F(SSLOGGER_FATAL, __VA_ARGS__)
 
-#if SSLN_ACTIVE_LEVEL <= SSLOGGER_TRACE_INT
-#define SSLN_TRACE_CT(...) SSLN_LOGGER_CALL(SSLOGGER_TRACE, __VA_ARGS__)
-#else
-#define SSLN_TRACE_CT(...) (void)0
-#endif
+#define SSLN_TRACE_CT(...) \
+    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Trace)) SSLN_LOG(SSLOGGER_TRACE, __VA_ARGS__)
 
-#if SSLN_ACTIVE_LEVEL <= SSLOGGER_DEBUG_INT
-#define SSLN_DEBUG_CT(...) SSLN_LOGGER_CALL(SSLOGGER_DEBUG, __VA_ARGS__)
-#else
-#define SSLN_DEBUG_CT(...) (void)0
-#endif
+#define SSLN_DEBUG_CT(...) \
+    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Debug)) SSLN_LOG(SSLOGGER_DEBUG, __VA_ARGS__)
 
-#if SSLN_ACTIVE_LEVEL <= SSLOGGER_INFO_INT
-#define SSLN_INFO_CT(...) SSLN_LOGGER_CALL(SSLOGGER_INFO, __VA_ARGS__)
-#else
-#define SSLN_INFO_CT(...) (void)0
-#endif
+#define SSLN_INFO_CT(...) \
+    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Info)) SSLN_LOG(SSLOGGER_INFO, __VA_ARGS__)
 
-#if SSLN_ACTIVE_LEVEL <= SSLOGGER_WARN_INT
-#define SSLN_WARN_CT(...) SSLN_LOGGER_CALL(SSLOGGER_WARN, __VA_ARGS__)
-#else
-#define SSLN_WARN_CT(...) (void)0
-#endif
+#define SSLN_WARN_CT(...) \
+    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Warn)) SSLN_LOG(SSLOGGER_WARN, __VA_ARGS__)
 
-#if SSLN_ACTIVE_LEVEL <= SSLOGGER_ERROR_INT
-#define SSLN_ERROR_CT(...) SSLN_LOGGER_CALL(SSLOGGER_ERROR, __VA_ARGS__)
-#else
-#define SSLN_ERROR_CT(...) (void)0
-#endif
+#define SSLN_ERROR_CT(...) \
+    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Error)) SSLN_LOG(SSLOGGER_ERROR, __VA_ARGS__)
 
-#if SSLN_ACTIVE_LEVEL <= SSLOGGER_FATAL_INT
-#define SSLN_FATAL_CT(...) SSLN_LOGGER_CALL(SSLOGGER_FATAL, __VA_ARGS__)
-#else
-#define SSLN_FATAL_CT(...) (void)0
-#endif
+#define SSLN_FATAL_CT(...) \
+    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Fatal)) SSLN_LOG(SSLOGGER_FATAL, __VA_ARGS__)
 
 #endif  // SSLN_SSLOGGER_H_

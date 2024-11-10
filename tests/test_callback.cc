@@ -4,12 +4,12 @@
 #include <iostream>
 #include <cassert>
 
+using ssln::g_logger;
 
 void test_callback() {
-    auto logger = ssln::Logger::GetInstance();
-    
+    ssln::Logger::Init();
     // 设置日志级别和格式
-    logger->SetLevel(SSLOGGER_DEBUG)
+    g_logger->SetLevel(SSLOGGER_DEBUG)
           .SetVerbose(ssln::Logger::Verbose::kMedium);
 
     // 用于测试的回调函数
@@ -23,7 +23,7 @@ void test_callback() {
     ssln::Logger::CallbackCondition condition;
     condition.level = SSLOGGER_INFO;
     condition.message = "test callback";
-    logger->AddCallback(condition, test_callback);
+    g_logger->AddCallback(condition, test_callback);
 
     // 记录一些日志消息
     SSLN_DEBUG("This is a debug message");

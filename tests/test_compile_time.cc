@@ -1,16 +1,17 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "../../include/ssln/sslogger.h"
+#include "ssln/sslogger.h"
 #include <sstream>
 #include <regex>
+
+using ssln::g_logger;
 
 class SSLoggerTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // 重置日志实例
-        ssln::Logger::GetInstance()->SetLevel(SSLOGGER_TRACE);
-        ssln::Logger::GetInstance()->SetVerbose(ssln::Logger::Verbose::kMedium);
-        ssln::Logger::GetInstance()->SetAsyncMode(false);
+        ssln::Logger::Init(".", "", false, SSLOGGER_TRACE, ssln::Logger::Verbose::kMedium, false);
+        ASSERT_NE(g_logger, nullptr);
     }
 
     void TearDown() override {
@@ -84,7 +85,7 @@ TEST_F(SSLoggerTest, CompileTimeLogging) {
 }
 
 TEST_F(SSLoggerTest, LogLevelControl) {
-    ssln::Logger::GetInstance()->SetLevel(SSLOGGER_DEBUG);
+    g_logger->SetLevel(SSLOGGER_DEBUG);
     auto output = CaptureLog([]() {
         SSLN_TRACE("This should not be logged");
         SSLN_DEBUG("This should be logged");
