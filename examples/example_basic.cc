@@ -15,7 +15,5 @@ int main(int argc, char* argv[]) {
     SSLN_INFO("Writing to another file");
     SSLN_INFOF("Writing to another file");
 
-    // 程序结束前关闭日志系统
-    ssln::Logger::Shutdown();
     return 0;
 }

@@ -1,3 +1,5 @@
+#define SSLN_ACTIVE_LEVEL ::ssln::LogLevel::Warn
+
 #include "ssln/sslogger.h"
 
 using ssln::g_logger;
@@ -11,12 +13,12 @@ int main() {
 
     // 记录一些日志
     int i = 999;
-    SSLN_INFO("This is a debug message {}", i);
+    SSLN_DEBUG("This is a debug message {}", i);
     SSLN_INFO("Important message");
 
     // 使用默认格式（只打印消息）
     SSLN_INFO("4 This is an info message");
-    SSLN_INFO("4 This is an info message");
+    SSLN_INFOF("4 This is an info message");
 
 
     // 切换到带时间的格式
@@ -32,21 +34,21 @@ int main() {
     SSLN_INFO("56, This is an info message with full format");
 
     // 将日志输出重定向到文件，并使用只有消息的格式
-    //Logger::GetInstance().SetLogFile("app.log", true);
     g_logger->SetVerbose(ssln::Logger::Verbose::kLite);
     SSLN_ERRORF("2 This is a error message in file");
     g_logger->SetVerbose(ssln::Logger::Verbose::kMedium);
     SSLN_DEBUGF("5 This is a debug message in file with time");
     SSLN_INFOF("4 This is a info message in file with time");
     SSLN_WARNF("2 This is a warn message in file with time");
+    SSLN_FATALF("4 This is a fatal message in file with time");
     SSLN_TRACEF("99 This is a trace message in file with time");
 
    // print to console
     SSLN_INFO("4 test done");
     SSLN_WARN("This is a 99 warn message with time");
 
-    //SSLN_CLOG(Level::INFO, "this is an info message in one compile log");
-    //SSLN_CLOGF(Level::INFO, "this is an info message in one compile log in file");
+    SSLN_DEBUG_CT("this is an debug message at compile time");
+    SSLN_FATAL_CT("this is an fatal message at compile time");
 
     uint8_t data[] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 
                   0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
@@ -64,6 +66,14 @@ int main() {
 
     g_logger->SetVerbose(ssln::Logger::Verbose::kFull);
     SSLN_LOG_ARRAY(SSLOGGER_DEBUG, data1, size1);
+    SSLN_INFOF("This is one array data1: {}", spdlog::to_hex(std::begin(data1), std::begin(data1)+size1));
+
+    std::vector<uint8_t> data3 = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 
+                  0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                  0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xFF, 0x12, 0x34,
+                  0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x01, 0x23,
+                  0x34, 0x45, 0x56 };
+    SSLN_DEBUGF("This is one vector data3: {}", spdlog::to_hex(data3.begin(), data3.end()));
 
     SSLN_WARNF("This is a warn message with time in file or console");
     g_logger->SetVerbose(ssln::Logger::Verbose::kLite);

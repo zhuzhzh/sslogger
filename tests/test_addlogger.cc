@@ -16,8 +16,6 @@ protected:
     }
 
     void TearDown() override {
-        // 清理日志系统
-        ssln::Logger::Shutdown();
     }
 
     // 辅助函数：检查文件是否包含特定内容
