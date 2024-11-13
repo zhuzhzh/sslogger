@@ -33,5 +33,8 @@ endforeach()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+
 # 可选：为所有测试添加包含目录
 include_directories(${CMAKE_SOURCE_DIR}/include)

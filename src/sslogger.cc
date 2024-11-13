@@ -385,6 +385,36 @@ void Logger::TriggerCallbacks(spdlog::level::level_enum level, const char* file,
 }
 
 /*!
+    * @brief Shuts down the logging system and cleans up resources
+    * 
+    * This method will:
+    * 1. Clear all registered loggers
+    * 2. Reset the global logger instance
+    * 3. Shutdown spdlog
+    */
+void Logger::Shutdown() {
+    if (g_logger) {
+        // Clear all registered loggers
+        g_logger->loggers_.clear();
+        g_logger->async_logger_.reset();
+        g_logger->sync_logger_.reset();
+        g_logger->console_logger_.reset();
+        g_logger->file_sink_.reset();
+        g_logger->console_sink_.reset();
+        
+        // Reset global logger
+        g_logger.reset();
+    }
+    
+    // Shutdown spdlog
+    try {
+        spdlog::shutdown();
+    } catch (...) {
+        // Ignore shutdown exceptions
+    }
+}
+
+/*!
  * @brief Sets the verbosity level for log formatting
  * 
  * @param ver Verbosity level to set

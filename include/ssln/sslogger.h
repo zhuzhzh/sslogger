@@ -15,6 +15,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <spdlog/stopwatch.h>
 
 // Define logging level macros
 #define SSLOGGER_TRACE    spdlog::level::trace
@@ -53,7 +54,7 @@ constexpr bool LogLevelLE() {
 }
 
 #define SSLN_LEVEL_ENABLED(level) \
-    ::ssln::LogLevelLE<SSLN_ACTIVE_LEVEL, level>()
+    (::ssln::LogLevelLE<SSLN_ACTIVE_LEVEL, level>())
 
 /*!
  * @brief Converts LogLevel enum to spdlog level
@@ -70,6 +71,62 @@ constexpr spdlog::level::level_enum ToSpdLogLevel(LogLevel level) {
         default:             return SSLOGGER_INFO;
     }
 }
+
+/*!
+ * @brief Wrapper class for manual timing measurement using steady clock
+ */
+class Stopwatch {
+    using clock = std::chrono::steady_clock;
+    std::chrono::time_point<clock> start_tp_;
+
+public:
+    Stopwatch()
+        : start_tp_{clock::now()} {}
+
+    /*!
+     * @brief Get elapsed time as duration
+     * 
+     * @return Duration since start or last reset
+     */
+    std::chrono::duration<double> elapsed() const {
+        return std::chrono::duration<double>(clock::now() - start_tp_);
+    }
+
+    /*!
+     * @brief Get elapsed time in milliseconds
+     * 
+     * @return Milliseconds since start or last reset
+     */
+    std::chrono::milliseconds elapsed_ms() const {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - start_tp_);
+    }
+
+    /*!
+     * @brief Get elapsed time in microseconds
+     * 
+     * @return Microseconds since start or last reset
+     */
+    std::chrono::microseconds elapsed_us() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(clock::now() - start_tp_);
+    }
+
+    /*!
+     * @brief Get elapsed time in nanoseconds
+     * 
+     * @return Nanoseconds since start or last reset
+     */
+    std::chrono::nanoseconds elapsed_ns() const {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(clock::now() - start_tp_);
+    }
+
+    /*!
+     * @brief Reset the stopwatch
+     */
+    void reset() { 
+        start_tp_ = clock::now(); 
+    }
+};
+
 
 /*!
  * @brief Main logger class providing logging functionality
@@ -113,6 +170,8 @@ public:
                     Verbose verbose = Verbose::kMedium,
                     bool allow_env_override = true);
 
+    static void Shutdown();
+
     // Configuration methods
     Logger& SetFile(const std::string& filename, bool truncate = true);
     Logger& SetAsyncMode(bool async_mode);
@@ -127,6 +186,14 @@ public:
 
     // Callback management
     void AddCallback(const CallbackCondition& condition, CallbackFunction callback);
+
+    // Add new public method to reload environment variables
+    void ReloadFromEnv() {
+        if (config_.allow_env_override) {
+            LoadFromEnv();
+            UpdateLoggers();
+        }
+    }
 
     template<typename... Args>
     using format_string_t = fmt::format_string<Args...>;
@@ -182,6 +249,20 @@ public:
     void LogArray(spdlog::level::level_enum level, const uint8_t* ptr, 
                  int size, bool to_file = false);
 
+    /*!
+     * @brief Gets the current active logger
+     * 
+     * @return Shared pointer to the current logger instance
+     */
+    std::shared_ptr<spdlog::logger> GetCurrentLogger() const {
+        if (config_.async_mode && async_logger_) {
+            return async_logger_;
+        } else if (sync_logger_) {
+            return sync_logger_;
+        }
+        return console_logger_;
+    }
+
 private:
     // Configuration structure
     struct Config {
@@ -229,6 +310,15 @@ private:
 extern std::shared_ptr<Logger> g_logger;
 
 } // namespace ssln
+
+// Add formatter support for our Stopwatch
+template<>
+struct fmt::formatter<ssln::Stopwatch> : fmt::formatter<double> {
+    template<typename FormatContext>
+    auto format(const ssln::Stopwatch& sw, FormatContext& ctx) const -> decltype(ctx.out()) {
+        return fmt::formatter<double>::format(sw.elapsed().count(), ctx);
+    }
+};
 
 // Logging macros
 #define SSLN_LOG_ARRAY(level, ptr, size) ssln::g_logger->LogArray(level, ptr, size, false)
@@ -313,5 +403,51 @@ extern std::shared_ptr<Logger> g_logger;
 #else
     #define SSLN_ASSERT(condition, message) do {} while(0)
 #endif
+
+// Manual stopwatch macros (new functionality)
+#define SSLN_LOG_ELAPSED(sw, level, ...) \
+    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed().count())
+
+#define SSLN_LOG_ELAPSED_MS(sw, level, ...) \
+    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed_ms().count())
+
+#define SSLN_LOG_ELAPSED_US(sw, level, ...) \
+    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed_us().count())
+
+#define SSLN_LOG_ELAPSED_NS(sw, level, ...) \
+    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed_ns().count())
+
+// For each log level with different time units
+#define SSLN_TRACE_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUG_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFO_ELAPSED(sw, ...)  SSLN_LOG_ELAPSED(sw, SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARN_ELAPSED(sw, ...)  SSLN_LOG_ELAPSED(sw, SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERROR_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATAL_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_FATAL, __VA_ARGS__)
+
+// Milliseconds variants
+#define SSLN_TRACE_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUG_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFO_ELAPSED_MS(sw, ...)  SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARN_ELAPSED_MS(sw, ...)  SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERROR_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATAL_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_FATAL, __VA_ARGS__)
+
+// Microseconds variants
+#define SSLN_TRACE_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUG_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFO_ELAPSED_US(sw, ...)  SSLN_LOG_ELAPSED_US(sw, SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARN_ELAPSED_US(sw, ...)  SSLN_LOG_ELAPSED_US(sw, SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERROR_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATAL_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_FATAL, __VA_ARGS__)
+
+// Nanoseconds variants
+#define SSLN_TRACE_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_TRACE, __VA_ARGS__)
+#define SSLN_DEBUG_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_DEBUG, __VA_ARGS__)
+#define SSLN_INFO_ELAPSED_NS(sw, ...)  SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_INFO, __VA_ARGS__)
+#define SSLN_WARN_ELAPSED_NS(sw, ...)  SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_WARN, __VA_ARGS__)
+#define SSLN_ERROR_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_ERROR, __VA_ARGS__)
+#define SSLN_FATAL_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_FATAL, __VA_ARGS__)
+
 
 #endif  // SSLN_SSLOGGER_H_
