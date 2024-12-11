@@ -1,3 +1,4 @@
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include "ssln/sslogger.h"
 #include "spdlog/fmt/bin_to_hex.h"
 #include <vector>
@@ -47,7 +48,7 @@ int main() {
 
     // 切换到文件日志
     ssln::init_async_file("logs", "advanced.log", 
-        spdlog::level::debug, ssln::Verbose::kFull, "file_logger");
+        spdlog::level::info, ssln::Verbose::kFull, "file_logger");
     
     auto file_logger = spdlog::get("file_logger");
     spdlog::set_default_logger(file_logger);
@@ -59,6 +60,7 @@ int main() {
     // 编译期日志测试
     SPDLOG_DEBUG("Debug message at compile time");
     SPDLOG_INFO("Info message at compile time");
+    SPDLOG_LOGGER_INFO(file_logger, "this is the full message with source information");
 
     // 使用不同的verbosity级别
     std::vector<uint8_t> small_data = {0x12, 0x34, 0x56, 0x78};

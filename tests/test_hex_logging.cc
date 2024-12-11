@@ -1,21 +1,85 @@
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
 // tests/test_hex_logging.cc
 #include "ssln/sslogger.h"
 #include <gtest/gtest.h>
+#include <sstream>
+#include <spdlog/sinks/ostream_sink.h>
 
-TEST(LoggerTest, HexLogging) {
-    ssln::init_console("hex_logger", spdlog::level::debug, ssln::Verbose::kMedium);
-    
-    // 测试数组输出
+class HexLoggingTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // Redirect spdlog output to our string stream for testing
+        test_stream_ = std::make_shared<std::ostringstream>();
+        auto ostream_sink = std::make_shared<spdlog::sinks::ostream_sink_st>(*test_stream_);
+        auto logger = std::make_shared<spdlog::logger>("hex_logger", ostream_sink);
+        
+        // Ensure both runtime and compile-time levels allow debug messages
+        EXPECT_EQ(SPDLOG_ACTIVE_LEVEL, SPDLOG_LEVEL_DEBUG) << "Compile-time log level should be DEBUG";
+        logger->set_level(spdlog::level::debug);
+        EXPECT_EQ(logger->level(), spdlog::level::debug) << "Runtime log level should be DEBUG";
+        
+        logger->set_pattern(ssln::detail::get_pattern(ssln::Verbose::kMedium));
+        spdlog::set_default_logger(logger);
+    }
+
+    void TearDown() override {
+        spdlog::drop_all();
+    }
+
+    std::shared_ptr<std::ostringstream> test_stream_;
+
+    // Helper function to check if string contains expected hex pattern
+    bool contains_hex_pattern(const std::string& output, const std::string& expected_hex) {
+        if (!output.find(expected_hex) != std::string::npos) {
+            std::cout << "Expected hex pattern not found.\n"
+                     << "Expected: " << expected_hex << "\n"
+                     << "Actual output: " << output << std::endl;
+            return false;
+        }
+        return true;
+    }
+};
+
+TEST_F(HexLoggingTest, ArrayHexLogging) {
     uint8_t data[] = {0x12, 0x34, 0x56, 0x78};
     SPDLOG_INFO("Array data: {}", spdlog::to_hex(data, data + sizeof(data)));
     
-    // 测试vector输出
-    std::vector<uint8_t> vec_data = {0x9A, 0xBC, 0xDE, 0xF0};
-    SPDLOG_DEBUG("Vector data: {}", spdlog::to_hex(vec_data));
+    std::string output = test_stream_->str();
+    EXPECT_FALSE(output.empty()) << "Log output should not be empty";
+    EXPECT_TRUE(contains_hex_pattern(output, "12 34 56 78"));
 }
 
-int main(int argc, char const *argv[])
-{
+TEST_F(HexLoggingTest, VectorHexLogging) {
+    std::vector<uint8_t> vec_data = {0x9A, 0xBC, 0xDE, 0xF0};
+    SPDLOG_DEBUG("Vector data: {}", spdlog::to_hex(vec_data));
+    
+    std::string output = test_stream_->str();
+    EXPECT_FALSE(output.empty()) << "Log output should not be empty";
+    EXPECT_TRUE(contains_hex_pattern(output, "9a bc de f0"));
+}
+
+TEST_F(HexLoggingTest, EmptyVectorHexLogging) {
+    std::vector<uint8_t> empty_vec;
+    SPDLOG_DEBUG("Empty vector: {}", spdlog::to_hex(empty_vec));
+    
+    std::string output = test_stream_->str();
+    EXPECT_FALSE(output.empty()) << "Log output should not be empty";
+    EXPECT_TRUE(output.find("Empty vector") != std::string::npos);
+}
+
+TEST_F(HexLoggingTest, LargeVectorHexLogging) {
+    std::vector<uint8_t> large_vec;
+    for (int i = 0; i < 16; ++i) {
+        large_vec.push_back(static_cast<uint8_t>(i));
+    }
+    SPDLOG_DEBUG("Large vector: {}", spdlog::to_hex(large_vec));
+    
+    std::string output = test_stream_->str();
+    EXPECT_FALSE(output.empty()) << "Log output should not be empty";
+    EXPECT_TRUE(contains_hex_pattern(output, "00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f"));
+}
+
+int main(int argc, char *argv[]) {
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
