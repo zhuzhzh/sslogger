@@ -1,453 +1,215 @@
 #ifndef SSLN_SSLOGGER_H_
 #define SSLN_SSLOGGER_H_
 
-#include <tl/optional.hpp>
 #include <spdlog/spdlog.h>
-#include <fmt/ranges.h>
+#include <spdlog/async.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/async.h>
-#include <spdlog/async_logger.h>
-#include <spdlog/sinks/daily_file_sink.h>
-#include <spdlog/fmt/bin_to_hex.h>
-#include <memory>
-#include <vector>
-#include <functional>
-#include <string>
-#include <unordered_map>
+#include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/stopwatch.h>
-
-// Define logging level macros
-#define SSLOGGER_TRACE    spdlog::level::trace
-#define SSLOGGER_DEBUG    spdlog::level::debug
-#define SSLOGGER_INFO     spdlog::level::info
-#define SSLOGGER_WARN     spdlog::level::warn
-#define SSLOGGER_ERROR    spdlog::level::err
-#define SSLOGGER_FATAL    spdlog::level::critical
-#define SSLOGGER_OFF      spdlog::level::off
+#include <cstdlib>
 
 namespace ssln {
 
-/*!
- * @brief Enumeration of logging levels for compile-time checks
- */
-enum class LogLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-    Fatal,
-    Off
+// Verbosity预设
+enum class Verbose {
+    kLite,    // 只有消息
+    kLow,     // 时间 + 消息
+    kMedium,  // 时间 + 级别 + 位置
+    kHigh,    // 时间 + 级别 + 线程 + 位置
+    kFull,    // 完整时间 + 级别 + 线程 + 函数 + 行号
+    kUltra    // 最详细格式
 };
 
-#ifndef SSLN_ACTIVE_LEVEL
-#define SSLN_ACTIVE_LEVEL ::ssln::LogLevel::Info
-#endif
+namespace detail {
+    // 获取预设的pattern
+    inline std::string get_pattern(Verbose ver) {
+        switch (ver) {
+            case Verbose::kLite:   return "%v";
+            case Verbose::kLow:    return "[%H:%M:%S.%f] %v";
+            case Verbose::kMedium: return "[%H:%M:%S.%f][%^%L%$][%@] %v";
+            case Verbose::kHigh:   return "[%H:%M:%S.%f][%^%L%$][thread %t][%@] %v";
+            case Verbose::kFull:   return "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][thread %t][%!][%#] %v";
+            case Verbose::kUltra:  return "[%Y-%m-%d %H:%M:%S.%F][%^%L%$][thread %t][%!][%@] %v";
+            default:               return "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][%t] %v";
+        }
+    }
 
-/*!
- * @brief Template for compile-time log level comparison
- */
-template<LogLevel A, LogLevel B>
-constexpr bool LogLevelLE() {
-    return static_cast<int>(A) <= static_cast<int>(B);
+    // 环境变量辅助函数
+    inline std::string get_env_or(const char* name, const std::string& default_value) {
+        const char* val = std::getenv(name);
+        return val ? val : default_value;
+    }
+
+    inline spdlog::level::level_enum get_level_from_env(spdlog::level::level_enum default_level) {
+        const char* level = std::getenv("SSLN_LOG_LEVEL");
+        if (!level) return default_level;
+        
+        std::string level_str = level;
+        if (level_str == "trace") return spdlog::level::trace;
+        if (level_str == "debug") return spdlog::level::debug;
+        if (level_str == "info")  return spdlog::level::info;
+        if (level_str == "warn")  return spdlog::level::warn;
+        if (level_str == "error") return spdlog::level::err;
+        if (level_str == "fatal") return spdlog::level::critical;
+        if (level_str == "off")   return spdlog::level::off;
+        return default_level;
+    }
+
+    inline Verbose get_verbose_from_env(Verbose default_verbose) {
+        const char* verb = std::getenv("SSLN_VERBOSITY");
+        if (!verb) return default_verbose;
+
+        std::string verb_str = verb;
+        if (verb_str == "lite")   return Verbose::kLite;
+        if (verb_str == "low")    return Verbose::kLow;
+        if (verb_str == "medium") return Verbose::kMedium;
+        if (verb_str == "high")   return Verbose::kHigh;
+        if (verb_str == "full")   return Verbose::kFull;
+        if (verb_str == "ultra")  return Verbose::kUltra;
+        return default_verbose;
+    }
+
+    // 添加线程池初始化标志
+    inline bool& thread_pool_initialized() {
+        static bool initialized = false;
+        return initialized;
+    }
+
+    // 初始化线程池（如果尚未初始化）
+    inline void init_thread_pool_once() {
+        if (!thread_pool_initialized()) {
+            const auto queue_size = std::stoi(get_env_or("SSLN_QUEUE_SIZE", "8192"));
+            const auto n_threads = std::stoi(get_env_or("SSLN_THREADS", "1"));
+            spdlog::init_thread_pool(queue_size, n_threads);
+            thread_pool_initialized() = true;
+        }
+    }
+} // namespace detail
+
+// 控制台日志初始化
+inline void init_console(
+    spdlog::level::level_enum level = spdlog::level::info,
+    Verbose verbose = Verbose::kMedium,
+    const std::string& logger_name = "console") {
+    
+    try {
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        auto logger = std::make_shared<spdlog::logger>(logger_name, console_sink);
+        
+        logger->set_level(detail::get_level_from_env(level));
+        logger->set_pattern(detail::get_pattern(detail::get_verbose_from_env(verbose)));
+        
+        spdlog::register_logger(logger);
+        spdlog::set_default_logger(logger);  // 设置为默认logger
+    } catch (const spdlog::spdlog_ex& ex) {
+        throw std::runtime_error(std::string("Logger initialization failed: ") + ex.what());
+    }
 }
 
-#define SSLN_LEVEL_ENABLED(level) \
-    (::ssln::LogLevelLE<SSLN_ACTIVE_LEVEL, level>())
-
-/*!
- * @brief Converts LogLevel enum to spdlog level
- */
-constexpr spdlog::level::level_enum ToSpdLogLevel(LogLevel level) {
-    switch (level) {
-        case LogLevel::Trace: return SSLOGGER_TRACE;
-        case LogLevel::Debug: return SSLOGGER_DEBUG;
-        case LogLevel::Info:  return SSLOGGER_INFO;
-        case LogLevel::Warn:  return SSLOGGER_WARN;
-        case LogLevel::Error: return SSLOGGER_ERROR;
-        case LogLevel::Fatal: return SSLOGGER_FATAL;
-        case LogLevel::Off:   return SSLOGGER_OFF;
-        default:             return SSLOGGER_INFO;
+// 同步文件日志初始化
+inline void init_sync_file(
+    const std::string& log_dir,
+    const std::string& log_name,
+    spdlog::level::level_enum level = spdlog::level::info,
+    Verbose verbose = Verbose::kMedium,
+    const std::string& logger_name = "sync_logger") {
+    
+    try {
+        // 优先使用环境变量中的设置
+        const auto final_dir = detail::get_env_or("SSLN_LOG_DIR", log_dir);
+        const auto final_name = detail::get_env_or("SSLN_LOG_NAME", log_name);
+        
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+            final_dir + "/" + final_name);
+            
+        auto logger = std::make_shared<spdlog::logger>(logger_name, file_sink);
+            
+        // 应用环境变量设置
+        logger->set_level(detail::get_level_from_env(level));
+        logger->set_pattern(detail::get_pattern(detail::get_verbose_from_env(verbose)));
+        
+        spdlog::register_logger(logger);
+        spdlog::set_default_logger(logger);  // 设置为默认logger
+    } catch (const spdlog::spdlog_ex& ex) {
+        throw std::runtime_error(std::string("Logger initialization failed: ") + ex.what());
     }
 }
 
-/*!
- * @brief Wrapper class for manual timing measurement using steady clock
- */
-class Stopwatch {
-    using clock = std::chrono::steady_clock;
-    std::chrono::time_point<clock> start_tp_;
-
-public:
-    Stopwatch()
-        : start_tp_{clock::now()} {}
-
-    /*!
-     * @brief Get elapsed time as duration
-     * 
-     * @return Duration since start or last reset
-     */
-    std::chrono::duration<double> elapsed() const {
-        return std::chrono::duration<double>(clock::now() - start_tp_);
+// 异步文件日志初始化（更新参数）
+inline void init_async_file(
+    const std::string& log_dir,
+    const std::string& log_name,
+    spdlog::level::level_enum level = spdlog::level::info,
+    Verbose verbose = Verbose::kMedium, 
+    const std::string& logger_name = "async_logger") {
+    
+    
+    try {
+        // 优先使用环境变量中的设置
+        const auto final_dir = detail::get_env_or("SSLN_LOG_DIR", log_dir);
+        const auto final_name = detail::get_env_or("SSLN_LOG_NAME", log_name);
+        const auto flush_secs = std::stoi(detail::get_env_or("SSLN_FLUSH_SECS", "3"));
+        
+        detail::init_thread_pool_once();
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+            final_dir + "/" + final_name);
+            
+        auto logger = std::make_shared<spdlog::async_logger>(
+            logger_name, file_sink, spdlog::thread_pool(),
+            spdlog::async_overflow_policy::block);
+            
+        logger->set_level(detail::get_level_from_env(level));
+        logger->set_pattern(detail::get_pattern(detail::get_verbose_from_env(verbose)));
+        
+        spdlog::register_logger(logger);
+        spdlog::set_default_logger(logger);  // 设置为默认logger
+        spdlog::flush_every(std::chrono::seconds(flush_secs));
+        
+    } catch (const spdlog::spdlog_ex& ex) {
+        throw std::runtime_error(std::string("Logger initialization failed: ") + ex.what());
     }
+}
 
-    /*!
-     * @brief Get elapsed time in milliseconds
-     * 
-     * @return Milliseconds since start or last reset
-     */
-    std::chrono::milliseconds elapsed_ms() const {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - start_tp_);
+// Rotating文件日志初始化
+inline void init_rotating_file(
+    const std::string& log_dir,
+    const std::string& log_name,
+    size_t max_file_size,
+    size_t max_files,
+    spdlog::level::level_enum level = spdlog::level::info,
+    Verbose verbose = Verbose::kMedium,
+    const std::string& logger_name = "rotating_logger") {
+    
+    try {
+        // 优先使用环境变量中的设置
+        const auto final_dir = detail::get_env_or("SSLN_LOG_DIR", log_dir);
+        const auto final_name = detail::get_env_or("SSLN_LOG_NAME", log_name);
+        const auto final_max_size = std::stoull(detail::get_env_or("SSLN_MAX_FILE_SIZE", 
+            std::to_string(max_file_size)));
+        const auto final_max_files = std::stoull(detail::get_env_or("SSLN_MAX_FILES", 
+            std::to_string(max_files)));
+        
+        auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            final_dir + "/" + final_name,
+            final_max_size,
+            final_max_files);
+            
+        auto logger = std::make_shared<spdlog::logger>(logger_name, file_sink);
+            
+        logger->set_level(detail::get_level_from_env(level));
+        logger->set_pattern(detail::get_pattern(detail::get_verbose_from_env(verbose)));
+        
+        spdlog::register_logger(logger);
+        spdlog::set_default_logger(logger);  // 设置为默认logger
+    } catch (const spdlog::spdlog_ex& ex) {
+        throw std::runtime_error(std::string("Logger initialization failed: ") + ex.what());
     }
+}
 
-    /*!
-     * @brief Get elapsed time in microseconds
-     * 
-     * @return Microseconds since start or last reset
-     */
-    std::chrono::microseconds elapsed_us() const {
-        return std::chrono::duration_cast<std::chrono::microseconds>(clock::now() - start_tp_);
-    }
-
-    /*!
-     * @brief Get elapsed time in nanoseconds
-     * 
-     * @return Nanoseconds since start or last reset
-     */
-    std::chrono::nanoseconds elapsed_ns() const {
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(clock::now() - start_tp_);
-    }
-
-    /*!
-     * @brief Reset the stopwatch
-     */
-    void reset() { 
-        start_tp_ = clock::now(); 
-    }
-};
-
-
-/*!
- * @brief Main logger class providing logging functionality
- */
-class Logger {
-public:
-    /*!
-     * @brief Verbosity levels for log formatting
-     */
-    enum class Verbose { 
-        kLite,    ///< Minimal logging format
-        kLow,     ///< Basic time and message
-        kMedium,  ///< Standard logging format
-        kHigh,    ///< Detailed logging with thread info
-        kFull,    ///< Full logging with source info
-        kUltra    ///< Maximum verbosity
-    };
-
-    using CallbackFunction = std::function<void(const spdlog::details::log_msg&)>;
-
-    /*!
-     * @brief Conditions for triggering log callbacks
-     */
-    struct CallbackCondition {
-        spdlog::level::level_enum level = SSLOGGER_OFF;
-        tl::optional<std::string> file;
-        tl::optional<int> line;
-        tl::optional<std::string> function;
-        tl::optional<std::string> message;
-    };
-
-    // Constructor and Destructor
-    Logger();
-    ~Logger();
-
-    // Initialization
-    static void Init(const std::string& log_dir = ".", 
-                    const std::string& log_file = "",
-                    bool async_mode = false,
-                    spdlog::level::level_enum level = SSLOGGER_INFO,
-                    Verbose verbose = Verbose::kMedium,
-                    bool allow_env_override = true);
-
-    static void Shutdown();
-
-    // Configuration methods
-    Logger& SetFile(const std::string& filename, bool truncate = true);
-    Logger& SetAsyncMode(bool async_mode);
-    Logger& SetLevel(spdlog::level::level_enum level);
-    Logger& SetVerbose(Verbose ver);
-    Logger& AddLogger(const std::string& name, const std::string& filename, bool daily = false);
-
-    // Async configuration methods
-    Logger& SetAsyncQueueSize(size_t size);
-    Logger& SetWorkerThreads(int threads);
-    Logger& SetFlushInterval(std::chrono::seconds interval);
-
-    // Callback management
-    void AddCallback(const CallbackCondition& condition, CallbackFunction callback);
-
-    // Add new public method to reload environment variables
-    void ReloadFromEnv() {
-        if (config_.allow_env_override) {
-            LoadFromEnv();
-            UpdateLoggers();
-        }
-    }
-
-    template<typename... Args>
-    using format_string_t = fmt::format_string<Args...>;
-
-    template<typename... Args>
-    void Log(spdlog::level::level_enum level, const char* file, int line, const char* func, format_string_t<Args...> fmt, const Args&... args) {
-        if (config_.async_mode && async_logger_) {
-            async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
-        } else {
-            console_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
-        }
-#ifdef SSLOGGER_ENABLE_CB
-        TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
-#endif
-    }
-
-    template<typename... Args>
-    void LogF(spdlog::level::level_enum level, const char* file, int line,
-              const char* func, format_string_t<Args...> fmt, const Args&... args) {
-        if (config_.async_mode) {
-            if(async_logger_) {
-                async_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
-            }
-        } else {
-            if (sync_logger_) {
-                sync_logger_->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
-            }
-        }
-#ifdef SSLOGGER_ENABLE_CB
-        TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
-#endif
-    }
-
-    template<typename... Args>
-    void LogTo(const std::string& logger_name, spdlog::level::level_enum level, const char* file, int line, const char* func, format_string_t<Args...> fmt, const Args&... args) {
-        auto it = loggers_.find(logger_name);
-        if (it != loggers_.end()) {
-            it->second->log(spdlog::source_loc{file, line, func}, level, fmt, args...);
-        }
-#ifdef SSLOGGER_ENABLE_CB
-        TriggerCallbacks(level, file, line, func, fmt::format(fmt, args...));
-#endif
-    }
-
-    // add batch log
-    template<typename Range>
-    void LogBatch(spdlog::level::level_enum level, const Range& range) {
-        if (config_.async_mode && async_logger_) {
-            async_logger_->log(level, fmt::join(range, ", "));
-        }
-    }
-
-    void LogArray(spdlog::level::level_enum level, const uint8_t* ptr, 
-                 int size, bool to_file = false);
-
-    /*!
-     * @brief Gets the current active logger
-     * 
-     * @return Shared pointer to the current logger instance
-     */
-    std::shared_ptr<spdlog::logger> GetCurrentLogger() const {
-        if (config_.async_mode && async_logger_) {
-            return async_logger_;
-        } else if (sync_logger_) {
-            return sync_logger_;
-        }
-        return console_logger_;
-    }
-
-private:
-    // Configuration structure
-    struct Config {
-        std::string log_dir = ".";
-        std::string log_file = "uv.log";
-        bool async_mode = false;
-        spdlog::level::level_enum level = SSLOGGER_INFO;
-        Verbose verbose = Verbose::kMedium;
-        std::string pattern_ = "[%Y-%m-%d %H:%M:%S.%f][%^%L%$][%t][%@] %v";
-        bool allow_env_override = true;
-
-        size_t async_queue_size = 8192;
-        int worker_threads = 1;
-        size_t buffer_size = 8192;
-        std::chrono::seconds flush_interval{3};
-    };
-
-    // Internal methods
-    void LoadFromEnv();
-    template<typename LoggerType>
-    void UpdateLogger(std::shared_ptr<LoggerType>& logger);
-    void UpdateLoggers();
-    void UpdateLoggersInternal();
-    void TriggerCallbacks(spdlog::level::level_enum level, const char* file, int line,
-                         const char* func, const std::string& message);
-    bool MatchesCondition(const CallbackCondition& condition, 
-                         const spdlog::details::log_msg& msg);
-
-    // Member variables
-    Config config_;
-    mutable std::mutex config_mutex_;
-    std::shared_ptr<spdlog::sinks::stdout_color_sink_mt> console_sink_;
-    std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink_;
-    std::shared_ptr<spdlog::logger> console_logger_;
-    std::shared_ptr<spdlog::logger> sync_logger_;
-    std::shared_ptr<spdlog::async_logger> async_logger_;
-    std::unordered_map<std::string, std::shared_ptr<spdlog::logger>> loggers_;
-
-    static constexpr size_t kMaxCallbacks = 16;
-    std::array<std::pair<CallbackCondition, CallbackFunction>, kMaxCallbacks> callbacks_;
-    size_t callback_count_ = 0;
-};
-
-// Global logger instance
-extern std::shared_ptr<Logger> g_logger;
+// Stopwatch别名
+using stopwatch = spdlog::stopwatch;
 
 } // namespace ssln
-
-// Add formatter support for our Stopwatch
-template<>
-struct fmt::formatter<ssln::Stopwatch> : fmt::formatter<double> {
-    template<typename FormatContext>
-    auto format(const ssln::Stopwatch& sw, FormatContext& ctx) const -> decltype(ctx.out()) {
-        return fmt::formatter<double>::format(sw.elapsed().count(), ctx);
-    }
-};
-
-// Logging macros
-#define SSLN_LOG_ARRAY(level, ptr, size) ssln::g_logger->LogArray(level, ptr, size, false)
-#define SSLN_LOGF_ARRAY(level, ptr, size) ssln::g_logger->LogArray(level, ptr, size, true)
-
-// Basic logging macros
-#define SSLN_LOG(level, ...) \
-    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-
-#define SSLN_TRACE(...) SSLN_LOG(SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUG(...) SSLN_LOG(SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFO(...)  SSLN_LOG(SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARN(...)  SSLN_LOG(SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERROR(...) SSLN_LOG(SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATAL(...) SSLN_LOG(SSLOGGER_FATAL, __VA_ARGS__)
-
-// File logging macros
-#define SSLN_LOG_TO(logger_name, level, ...) \
-    if (ssln::g_logger) ssln::g_logger->LogTo(logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-
-#define SSLN_TRACE_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUG_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFO_TO(logger_name, ...)  SSLN_LOG_TO(logger_name, SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARN_TO(logger_name, ...)  SSLN_LOG_TO(logger_name, SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERROR_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATAL_TO(logger_name, ...) SSLN_LOG_TO(logger_name, SSLOGGER_FATAL, __VA_ARGS__)
-
-// File-specific logging macros
-#define SSLN_LOG_F(level, ...) \
-    if (ssln::g_logger) ssln::g_logger->LogF(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
-
-#define SSLN_TRACEF(...) SSLN_LOG_F(SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUGF(...) SSLN_LOG_F(SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFOF(...)  SSLN_LOG_F(SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARNF(...)  SSLN_LOG_F(SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERRORF(...) SSLN_LOG_F(SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATALF(...) SSLN_LOG_F(SSLOGGER_FATAL, __VA_ARGS__)
-
-// Compile-time logging macros
-#define SSLN_LOGGER_CALL(level, ...) \
-    if constexpr (SSLN_LEVEL_ENABLED(level)) SSLN_LOG(ToSpdLogLevel(level), __VA_ARGS__)
-
-#define SSLN_LOGGER_CALL_F(level, ...) \
-    if constexpr (SSLN_LEVEL_ENABLED(level)) SSLN_LOG_F(ToSpdLogLevel(level), __VA_ARGS__)
-
-// Compile-time level checks
-#define SSLN_TRACE_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Trace)
-#define SSLN_DEBUG_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Debug)
-#define SSLN_INFO_ENABLED()  SSLN_LEVEL_ENABLED(::ssln::LogLevel::Info)
-#define SSLN_WARN_ENABLED()  SSLN_LEVEL_ENABLED(::ssln::LogLevel::Warn)
-#define SSLN_ERROR_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Error)
-#define SSLN_FATAL_ENABLED() SSLN_LEVEL_ENABLED(::ssln::LogLevel::Fatal)
-
-// Compile-time logging macros
-#define SSLN_TRACE_CT(...) \
-    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Trace)) SSLN_LOG(SSLOGGER_TRACE, __VA_ARGS__)
-
-#define SSLN_DEBUG_CT(...) \
-    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Debug)) SSLN_LOG(SSLOGGER_DEBUG, __VA_ARGS__)
-
-#define SSLN_INFO_CT(...) \
-    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Info)) SSLN_LOG(SSLOGGER_INFO, __VA_ARGS__)
-
-#define SSLN_WARN_CT(...) \
-    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Warn)) SSLN_LOG(SSLOGGER_WARN, __VA_ARGS__)
-
-#define SSLN_ERROR_CT(...) \
-    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Error)) SSLN_LOG(SSLOGGER_ERROR, __VA_ARGS__)
-
-#define SSLN_FATAL_CT(...) \
-    if constexpr (SSLN_LEVEL_ENABLED(::ssln::LogLevel::Fatal)) SSLN_LOG(SSLOGGER_FATAL, __VA_ARGS__)
-
-// Debug assertions
-#ifdef SSLN_DEBUG_BUILD
-    #define SSLN_ASSERT(condition, message) \
-        do { \
-            if (!(condition)) { \
-                SSLN_FATAL("Assertion failed: {}", message); \
-                std::abort(); \
-            } \
-        } while(0)
-#else
-    #define SSLN_ASSERT(condition, message) do {} while(0)
-#endif
-
-// Manual stopwatch macros (new functionality)
-#define SSLN_LOG_ELAPSED(sw, level, ...) \
-    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed().count())
-
-#define SSLN_LOG_ELAPSED_MS(sw, level, ...) \
-    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed_ms().count())
-
-#define SSLN_LOG_ELAPSED_US(sw, level, ...) \
-    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed_us().count())
-
-#define SSLN_LOG_ELAPSED_NS(sw, level, ...) \
-    if(ssln::g_logger) ssln::g_logger->Log(level, __FILE__, __LINE__, __func__, __VA_ARGS__, sw.elapsed_ns().count())
-
-// For each log level with different time units
-#define SSLN_TRACE_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUG_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFO_ELAPSED(sw, ...)  SSLN_LOG_ELAPSED(sw, SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARN_ELAPSED(sw, ...)  SSLN_LOG_ELAPSED(sw, SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERROR_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATAL_ELAPSED(sw, ...) SSLN_LOG_ELAPSED(sw, SSLOGGER_FATAL, __VA_ARGS__)
-
-// Milliseconds variants
-#define SSLN_TRACE_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUG_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFO_ELAPSED_MS(sw, ...)  SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARN_ELAPSED_MS(sw, ...)  SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERROR_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATAL_ELAPSED_MS(sw, ...) SSLN_LOG_ELAPSED_MS(sw, SSLOGGER_FATAL, __VA_ARGS__)
-
-// Microseconds variants
-#define SSLN_TRACE_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUG_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFO_ELAPSED_US(sw, ...)  SSLN_LOG_ELAPSED_US(sw, SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARN_ELAPSED_US(sw, ...)  SSLN_LOG_ELAPSED_US(sw, SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERROR_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATAL_ELAPSED_US(sw, ...) SSLN_LOG_ELAPSED_US(sw, SSLOGGER_FATAL, __VA_ARGS__)
-
-// Nanoseconds variants
-#define SSLN_TRACE_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_TRACE, __VA_ARGS__)
-#define SSLN_DEBUG_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_DEBUG, __VA_ARGS__)
-#define SSLN_INFO_ELAPSED_NS(sw, ...)  SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_INFO, __VA_ARGS__)
-#define SSLN_WARN_ELAPSED_NS(sw, ...)  SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_WARN, __VA_ARGS__)
-#define SSLN_ERROR_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_ERROR, __VA_ARGS__)
-#define SSLN_FATAL_ELAPSED_NS(sw, ...) SSLN_LOG_ELAPSED_NS(sw, SSLOGGER_FATAL, __VA_ARGS__)
-
 
 #endif  // SSLN_SSLOGGER_H_
