@@ -22,7 +22,7 @@ SSLogger 是一个基于 spdlog 的 C++ 日志库封装，提供了简单易用�
 
 int main() {
     // 初始化控制台日志，指定 logger name
-    ssln::init_console(spdlog::level::debug, ssln::Verbose::kMedium, "console_logger");
+    ssln::InitConsole(spdlog::level::debug, ssln::Verbose::kMedium, "console_logger");
     
     // 方式1：使用全局宏
     SPDLOG_INFO("Hello, SSLogger!");
@@ -39,15 +39,15 @@ int main() {
 
 ```cpp
 // 同步文件日志
-ssln::init_sync_file("logs", "app.log", spdlog::level::info, ssln::Verbose::kMedium, "sync_logger");
+ssln::InitSyncFile("logs", "app.log", spdlog::level::info, ssln::Verbose::kMedium, "sync_logger");
 auto sync_logger = spdlog::get("sync_logger");
 
 // 异步文件日志
-ssln::init_async_file("logs", "app.log", spdlog::level::info, ssln::Verbose::kMedium, "async_logger");
+ssln::InitAsyncFile("logs", "app.log", spdlog::level::info, ssln::Verbose::kMedium, "async_logger");
 auto async_logger = spdlog::get("async_logger");
 
 // 滚动文件日志（自动分割大文件）
-ssln::init_rotating_file(
+ssln::InitRotatingFile(
     "logs", "app.log",
     1024*1024*10, 5,  // 最大文件大小和文件数
     spdlog::level::info,
@@ -66,26 +66,26 @@ rotating_logger->warn("Using rotating logger");
 
 ```cpp
 // 最简格式：仅消息
-ssln::init_console(spdlog::level::info, ssln::Verbose::kLite, "lite_logger");
+ssln::InitConsole(spdlog::level::info, ssln::Verbose::kLite, "lite_logger");
 auto logger = spdlog::get("lite_logger");
 logger->info("Message only");  // 输出: Message only
 
 // 低详细度：时间 + 消息
-ssln::init_console(spdlog::level::info, ssln::Verbose::kLow, "low_logger");
+ssln::InitConsole(spdlog::level::info, ssln::Verbose::kLow, "low_logger");
 SPDLOG_LOGGER_INFO(spdlog::get("low_logger"), "With time");  // 输出: [HH:MM:SS.ms] With time
 
 // 中等详细度：时间 + 级别 + 位置
-ssln::init_console(spdlog::level::info, ssln::Verbose::kMedium, "medium_logger");
+ssln::InitConsole(spdlog::level::info, ssln::Verbose::kMedium, "medium_logger");
 SPDLOG_INFO("Standard");  // 输出: [HH:MM:SS.ms][INFO][file.cpp:42] Standard
 
 // 高详细度：时间 + 级别 + 线程 + 位置
-ssln::init_console(spdlog::level::info, ssln::Verbose::kHigh, "high_logger");
+ssln::InitConsole(spdlog::level::info, ssln::Verbose::kHigh, "high_logger");
 
 // 完整格式：完整时间 + 级别 + 线程 + 函数 + 行号
-ssln::init_console(spdlog::level::info, ssln::Verbose::kFull, "full_logger");
+ssln::InitConsole(spdlog::level::info, ssln::Verbose::kFull, "full_logger");
 
 // 超详细格式：毫秒精度时间戳 + 所有信息
-ssln::init_console(spdlog::level::info, ssln::Verbose::kUltra, "ultra_logger");
+ssln::InitConsole(spdlog::level::info, ssln::Verbose::kUltra, "ultra_logger");
 ```
 
 ### 十六进制数据输出
