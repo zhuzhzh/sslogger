@@ -3,12 +3,12 @@
 #include "ssln/sslogger.h"
 #include <gtest/gtest.h>
 #include <sstream>
+#include <regex>
 #include <spdlog/sinks/ostream_sink.h>
 
 class HexLoggingTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Redirect spdlog output to our string stream for testing
         test_stream_ = std::make_shared<std::ostringstream>();
         auto ostream_sink = std::make_shared<spdlog::sinks::ostream_sink_st>(*test_stream_);
         auto logger = std::make_shared<spdlog::logger>("hex_logger", ostream_sink);
@@ -18,7 +18,7 @@ protected:
         logger->set_level(spdlog::level::debug);
         EXPECT_EQ(logger->level(), spdlog::level::debug) << "Runtime log level should be DEBUG";
         
-        logger->set_pattern(ssln::detail::get_pattern(ssln::Verbose::kMedium));
+        logger->set_pattern(ssln::detail::GetPattern(ssln::Verbose::kMedium));
         spdlog::set_default_logger(logger);
     }
 
@@ -26,18 +26,37 @@ protected:
         spdlog::drop_all();
     }
 
-    std::shared_ptr<std::ostringstream> test_stream_;
-
     // Helper function to check if string contains expected hex pattern
-    bool contains_hex_pattern(const std::string& output, const std::string& expected_hex) {
-        if (!output.find(expected_hex) != std::string::npos) {
-            std::cout << "Expected hex pattern not found.\n"
-                     << "Expected: " << expected_hex << "\n"
-                     << "Actual output: " << output << std::endl;
-            return false;
+    bool ContainsHexPattern(const std::string& output, const std::string& expected_hex) {
+        // Remove all spaces for easier comparison.
+        std::string clean_expected = expected_hex;
+        clean_expected.erase(
+            std::remove(clean_expected.begin(), clean_expected.end(), ' '),
+            clean_expected.end());
+        
+        // Build regex pattern to match possible hex output formats.
+        std::string pattern = "[\\s\\S]*?";  // Any character including newlines.
+        for (size_t i = 0; i < clean_expected.length(); i += 2) {
+            if (i > 0) {
+                pattern += "[\\s:]*";  // Allow spaces and colons.
+            }
+            pattern += clean_expected.substr(i, 2);
         }
-        return true;
+        
+        std::regex hex_pattern(pattern, std::regex::icase);
+        bool found = std::regex_search(output, hex_pattern);
+        
+        if (!found) {
+            std::cout << "Expected hex pattern not found.\n"
+                      << "Expected: " << expected_hex << "\n"
+                      << "Clean expected: " << clean_expected << "\n"
+                      << "Pattern: " << pattern << "\n"
+                      << "Actual output: " << output << std::endl;
+        }
+        return found;
     }
+
+    std::shared_ptr<std::ostringstream> test_stream_;
 };
 
 TEST_F(HexLoggingTest, ArrayHexLogging) {
@@ -46,7 +65,7 @@ TEST_F(HexLoggingTest, ArrayHexLogging) {
     
     std::string output = test_stream_->str();
     EXPECT_FALSE(output.empty()) << "Log output should not be empty";
-    EXPECT_TRUE(contains_hex_pattern(output, "12 34 56 78"));
+    EXPECT_TRUE(ContainsHexPattern(output, "12 34 56 78"));
 }
 
 TEST_F(HexLoggingTest, VectorHexLogging) {
@@ -55,7 +74,7 @@ TEST_F(HexLoggingTest, VectorHexLogging) {
     
     std::string output = test_stream_->str();
     EXPECT_FALSE(output.empty()) << "Log output should not be empty";
-    EXPECT_TRUE(contains_hex_pattern(output, "9a bc de f0"));
+    EXPECT_TRUE(ContainsHexPattern(output, "9a bc de f0"));
 }
 
 TEST_F(HexLoggingTest, EmptyVectorHexLogging) {
@@ -76,7 +95,7 @@ TEST_F(HexLoggingTest, LargeVectorHexLogging) {
     
     std::string output = test_stream_->str();
     EXPECT_FALSE(output.empty()) << "Log output should not be empty";
-    EXPECT_TRUE(contains_hex_pattern(output, "00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f"));
+    EXPECT_TRUE(ContainsHexPattern(output, "00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f"));
 }
 
 int main(int argc, char *argv[]) {

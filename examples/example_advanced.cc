@@ -6,7 +6,7 @@
 
 int main() {
     // 初始化控制台日志
-    ssln::init_console(spdlog::level::debug, ssln::Verbose::kFull, "console");
+    ssln::InitConsole(spdlog::level::debug, ssln::Verbose::kFull, "console");
 
     // 基本日志测试
     int i = 999;
@@ -47,7 +47,7 @@ int main() {
         spdlog::to_hex(large_data, large_data + sizeof(large_data)));
 
     // 切换到文件日志
-    ssln::init_async_file("logs", "advanced.log", 
+    ssln::InitAsyncFile("logs", "advanced.log", 
         spdlog::level::info, ssln::Verbose::kFull, "file_logger");
     
     auto file_logger = spdlog::get("file_logger");
@@ -66,13 +66,13 @@ int main() {
     std::vector<uint8_t> small_data = {0x12, 0x34, 0x56, 0x78};
     
     // Lite format
-    ssln::init_console(spdlog::level::debug, ssln::Verbose::kLite, "console2");
+    ssln::InitConsole(spdlog::level::debug, ssln::Verbose::kLite, "console2");
     auto lite_logger = spdlog::get("console2");
     spdlog::set_default_logger(lite_logger);
     spdlog::info("Small data (lite): {}", spdlog::to_hex(small_data));
 
     // Full format
-    ssln::init_console(spdlog::level::debug, ssln::Verbose::kFull, "console3");
+    ssln::InitConsole(spdlog::level::debug, ssln::Verbose::kFull, "console3");
     auto full_logger = spdlog::get("console3");
     spdlog::set_default_logger(full_logger);
     SPDLOG_INFO("Small data (full): {}", spdlog::to_hex(small_data));

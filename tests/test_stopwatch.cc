@@ -23,7 +23,7 @@ protected:
     }
 
     // Helper function to check if elapsed time is within expected range
-    void check_elapsed_time(const std::string& output, double expected_ms, double tolerance_ms = 20) {
+    void CheckElapsedTime(const std::string& output, double expected_ms, double tolerance_ms = 20) {
         std::regex time_pattern(R"([\d.]+)");
         std::smatch matches;
         ASSERT_TRUE(std::regex_search(output, matches, time_pattern)) 
@@ -47,7 +47,7 @@ TEST_F(StopwatchTest, BasicMeasurement) {
     // Basic elapsed time
     test_stream_->str(""); // Clear previous output
     spdlog::info("Elapsed time: {}", sw);
-    check_elapsed_time(test_stream_->str(), 100);
+    CheckElapsedTime(test_stream_->str(), 100);
 }
 
 TEST_F(StopwatchTest, FormattedOutput) {
@@ -64,7 +64,7 @@ TEST_F(StopwatchTest, FormattedOutput) {
     EXPECT_TRUE(std::regex_search(output, format_pattern)) 
         << "Output doesn't match expected format (X.XXX): " << output;
     
-    check_elapsed_time(output, 50);
+    CheckElapsedTime(output, 50);
 }
 
 TEST_F(StopwatchTest, MultipleIntervals) {
@@ -74,13 +74,13 @@ TEST_F(StopwatchTest, MultipleIntervals) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     test_stream_->str("");
     spdlog::info("First interval: {}", sw);
-    check_elapsed_time(test_stream_->str(), 50);
+    CheckElapsedTime(test_stream_->str(), 50);
     
     // Second interval
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     test_stream_->str("");
     spdlog::info("Second interval: {}", sw);
-    check_elapsed_time(test_stream_->str(), 100);
+    CheckElapsedTime(test_stream_->str(), 100);
 }
 
 TEST_F(StopwatchTest, ElapsedCount) {
@@ -91,7 +91,7 @@ TEST_F(StopwatchTest, ElapsedCount) {
     SPDLOG_INFO("Elapsed seconds: {} seconds", sw.elapsed().count());
     
     std::string output = test_stream_->str();
-    check_elapsed_time(output, 100);
+    CheckElapsedTime(output, 100);
     
     // Verify "seconds" unit is present
     EXPECT_TRUE(output.find("seconds") != std::string::npos) 
