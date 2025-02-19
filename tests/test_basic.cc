@@ -35,7 +35,9 @@ class BasicLoggerTest : public ::testing::Test {
       quill::Frontend::remove_logger(logger);
     }
     ssln::default_logger = nullptr;
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    while(quill::Frontend::get_number_of_loggers() != 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
   }
 
   // Helper function to check if output contains expected string

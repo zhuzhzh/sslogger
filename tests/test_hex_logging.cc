@@ -30,15 +30,13 @@ protected:
         if (logger) {
             logger->flush_log();
         
-        // Reset all loggers
-        //auto loggers = quill::Frontend::get_all_loggers();
-        //for (auto& logger : loggers) {
-        //    quill::Frontend::remove_logger(logger);
-        //}
-        quill::Frontend::remove_logger(logger); 
+        size_t const total_loggers = quill::Frontend::get_number_of_loggers();
+        quill::Frontend::remove_logger(logger);
+        while(quill::Frontend::get_number_of_loggers()!=(total_loggers-1)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         ssln::default_logger = nullptr;
         logger = nullptr;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
 

@@ -28,6 +28,9 @@ protected:
         for (auto& logger : loggers) {
             quill::Frontend::remove_logger(logger);
         }
+        while(quill::Frontend::get_number_of_loggers() != 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         ssln::default_logger = nullptr;
     }
 
