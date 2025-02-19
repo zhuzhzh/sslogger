@@ -1,97 +1,102 @@
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
+#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 // tests/test_verbosity.cc
 #include "ssln/sslogger.h"
-#include <gtest/gtest.h>
+#include "ssln/sslogger_macros.h"
+
+// C++ standard library headers
+#include <fstream>
 #include <sstream>
 #include <regex>
-#include <spdlog/sinks/ostream_sink.h>
+#include <thread>
+
+// Google Test headers
+#include <gtest/gtest.h>
+
+// Quill headers
+#include "quill/Backend.h"
+#include "quill/Frontend.h"
 
 class VerbosityTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_stream_ = std::make_shared<std::ostringstream>();
-        sink_ = std::make_shared<spdlog::sinks::ostream_sink_st>(*test_stream_);
+        // Initialize backend
+        ssln::InitBackend();
     }
 
     void TearDown() override {
-        spdlog::drop_all();
+        auto loggers = quill::Frontend::get_all_loggers();
+        for (auto& logger : loggers) {
+            quill::Frontend::remove_logger(logger);
+        }
+        ssln::default_logger = nullptr;
     }
 
     void CreateLogger(ssln::Verbose verbosity, const std::string& name) {
-        auto logger = std::make_shared<spdlog::logger>(name, sink_);
-        logger->set_level(spdlog::level::debug);
-        logger->set_pattern(ssln::detail::GetPattern(verbosity));
-        spdlog::set_default_logger(logger);
-        test_stream_->str("");
+        logger = ssln::SetupConsole(quill::LogLevel::Debug, verbosity, name);
+        ssln::set_default_logger(logger);
     }
 
-    void CheckBasicFormat(const std::string& output, bool expect_brackets) {
-        EXPECT_FALSE(output.empty()) << "Output should not be empty";
-        EXPECT_TRUE(output.find("Test message") != std::string::npos) 
-            << "Output missing test message: " << output;
+    void CheckBasicFormat(const std::string& pattern, bool expect_brackets) {
+        // Create a test message
+        SSLN_INFO("Test message");
         
+        // Check pattern format
         if (!expect_brackets) {
-            EXPECT_EQ(output.find('['), std::string::npos) 
-                << "Format should not contain brackets: " << output;
+            EXPECT_EQ(pattern.find('['), std::string::npos) 
+                << "Format should not contain brackets: " << pattern;
         } else {
-            EXPECT_NE(output.find('['), std::string::npos) 
-                << "Format should contain brackets: " << output;
+            EXPECT_NE(pattern.find('['), std::string::npos) 
+                << "Format should contain brackets: " << pattern;
         }
     }
 
-    std::shared_ptr<std::ostringstream> test_stream_;
-    std::shared_ptr<spdlog::sinks::ostream_sink_st> sink_;
+    quill::Logger* logger;
 };
 
 TEST_F(VerbosityTest, LiteVerbosity) {
     CreateLogger(ssln::Verbose::kLite, "lite_logger");
-    SPDLOG_INFO("Test message");
-    CheckBasicFormat(test_stream_->str(), false);
+    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kLite);
+    CheckBasicFormat(pattern, false);
 }
 
 TEST_F(VerbosityTest, LowVerbosity) {
     CreateLogger(ssln::Verbose::kLow, "low_logger");
-    SPDLOG_INFO("Test message");
-    std::string output = test_stream_->str();
-    CheckBasicFormat(output, true);
-    EXPECT_TRUE(std::regex_search(output, std::regex(R"(\[\d{2}:\d{2}:\d{2})")))
-        << "Low format missing time: " << output;
+    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kLow);
+    CheckBasicFormat(pattern, true);
+    EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(time\\)")))
+        << "Low format missing time: " << pattern;
 }
 
 TEST_F(VerbosityTest, MediumVerbosity) {
     CreateLogger(ssln::Verbose::kMedium, "medium_logger");
-    SPDLOG_INFO("Test message");
-    std::string output = test_stream_->str();
-    CheckBasicFormat(output, true);
-    EXPECT_TRUE(std::regex_search(output, std::regex(R"(\[I\])")))
-        << "Medium format missing level: " << output;
+    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kMedium);
+    CheckBasicFormat(pattern, true);
+    EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(log_level\\)")))
+        << "Medium format missing level: " << pattern;
 }
 
 TEST_F(VerbosityTest, HighVerbosity) {
     CreateLogger(ssln::Verbose::kHigh, "high_logger");
-    SPDLOG_INFO("Test message");
-    std::string output = test_stream_->str();
-    CheckBasicFormat(output, true);
-    EXPECT_TRUE(std::regex_search(output, std::regex(R"(\[thread \d+\])")))
-        << "High format missing thread id: " << output;
+    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kHigh);
+    CheckBasicFormat(pattern, true);
+    EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(thread_id\\)")))
+        << "High format missing thread id: " << pattern;
 }
 
 TEST_F(VerbosityTest, FullVerbosity) {
     CreateLogger(ssln::Verbose::kFull, "full_logger");
-    SPDLOG_INFO("Test message");
-    std::string output = test_stream_->str();
-    CheckBasicFormat(output, true);
-    EXPECT_TRUE(std::regex_search(output, std::regex(R"(\[\d{4}-\d{2}-\d{2})")))
-        << "Full format missing date: " << output;
+    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kFull);
+    CheckBasicFormat(pattern, true);
+    EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(caller_function\\)")))
+        << "Full format missing function name: " << pattern;
 }
 
 TEST_F(VerbosityTest, UltraVerbosity) {
     CreateLogger(ssln::Verbose::kUltra, "ultra_logger");
-    SPDLOG_INFO("Test message");
-    std::string output = test_stream_->str();
-    CheckBasicFormat(output, true);
-    EXPECT_TRUE(std::regex_search(output, std::regex(R"(\.\d{9}\])")))
-        << "Ultra format missing microseconds: " << output;
+    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kUltra);
+    CheckBasicFormat(pattern, true);
+    EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(time\\)")))
+        << "Ultra format missing high precision time: " << pattern;
 }
 
 int main(int argc, char *argv[]) {

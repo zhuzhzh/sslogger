@@ -1,6 +1,6 @@
 # SSLogger
 
-SSLogger 是一个基于 spdlog 的 C++ 日志库封装，提供了简单易用且高性能的日志功能。
+SSLogger 是一个基于 quill 的 C++ 日志库封装，提供了简单易用且高性能的日志功能。
 
 ## 主要特性
 
@@ -22,135 +22,136 @@ SSLogger 是一个基于 spdlog 的 C++ 日志库封装，提供了简单易用�
 
 int main() {
     // 初始化控制台日志，指定 logger name
-    ssln::InitConsole(spdlog::level::debug, ssln::Verbose::kMedium, "console_logger");
+    ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kMedium, "console_logger");
     
-    // 方式1：使用全局宏
-    SPDLOG_INFO("Hello, SSLogger!");
-    SPDLOG_DEBUG("Debug message: {}", 42);
+    // 使用日志宏
+    SSLN_INFO("Hello, SSLogger!");
+    SSLN_DEBUG("Debug message: {}", 42);
 
-    // 方式2：获取指定名称的 logger
-    auto logger = spdlog::get("console_logger");
-    logger->info("Using logger pointer directly");
-    SPDLOG_LOGGER_INFO(logger, "Using logger-specific macro");
+    // 获取指定名称的 logger
+    auto logger = ssln::get_logger("console_logger");
+    SSLN_LOG_INFO(logger, "Using logger-specific macro");
 }
 ```
 
 ### 文件日志
 
 ```cpp
-// 同步文件日志
-ssln::InitSyncFile("logs", "app.log", spdlog::level::info, ssln::Verbose::kMedium, "sync_logger");
-auto sync_logger = spdlog::get("sync_logger");
-
-// 异步文件日志
-ssln::InitAsyncFile("logs", "app.log", spdlog::level::info, ssln::Verbose::kMedium, "async_logger");
-auto async_logger = spdlog::get("async_logger");
+// 普通文件日志
+ssln::SetupFile("app.log", quill::LogLevel::Info, ssln::Verbose::kMedium, "file_logger");
 
 // 滚动文件日志（自动分割大文件）
-ssln::InitRotatingFile(
-    "logs", "app.log",
-    1024*1024*10, 5,  // 最大文件大小和文件数
-    spdlog::level::info,
+ssln::SetupRotatingFile(
+    "app.log",
+    1024*1024*10,  // 最大文件大小
+    5,             // 最大文件数
+    quill::LogLevel::Info,
     ssln::Verbose::kMedium,
     "rotating_logger"
 );
-auto rotating_logger = spdlog::get("rotating_logger");
 
-// 使用获取的 logger
-sync_logger->info("Using sync logger");
-SPDLOG_LOGGER_INFO(async_logger, "Using async logger");
-rotating_logger->warn("Using rotating logger");
+// 性能日志（最简格式）
+ssln::SetupPerfFile("perf.log", quill::LogLevel::Info, ssln::Verbose::kLite, "perf_logger");
 ```
 
 ### 日志格式预设
 
 ```cpp
 // 最简格式：仅消息
-ssln::InitConsole(spdlog::level::info, ssln::Verbose::kLite, "lite_logger");
-auto logger = spdlog::get("lite_logger");
-logger->info("Message only");  // 输出: Message only
+ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kLite);
+SSLN_INFO("Message only");  // 输出: Message only
 
 // 低详细度：时间 + 消息
-ssln::InitConsole(spdlog::level::info, ssln::Verbose::kLow, "low_logger");
-SPDLOG_LOGGER_INFO(spdlog::get("low_logger"), "With time");  // 输出: [HH:MM:SS.ms] With time
+ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kLow);
+SSLN_INFO("With time");  // 输出: [23:59:59.123] With time
 
 // 中等详细度：时间 + 级别 + 位置
-ssln::InitConsole(spdlog::level::info, ssln::Verbose::kMedium, "medium_logger");
-SPDLOG_INFO("Standard");  // 输出: [HH:MM:SS.ms][INFO][file.cpp:42] Standard
+ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kMedium);
+SSLN_INFO("Standard");  // 输出: [23:59:59.123][INFO][file.cpp:42] Standard
 
 // 高详细度：时间 + 级别 + 线程 + 位置
-ssln::InitConsole(spdlog::level::info, ssln::Verbose::kHigh, "high_logger");
+ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kHigh);
 
 // 完整格式：完整时间 + 级别 + 线程 + 函数 + 行号
-ssln::InitConsole(spdlog::level::info, ssln::Verbose::kFull, "full_logger");
+ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kFull);
 
 // 超详细格式：毫秒精度时间戳 + 所有信息
-ssln::InitConsole(spdlog::level::info, ssln::Verbose::kUltra, "ultra_logger");
+ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kUltra);
 ```
 
 ### 十六进制数据输出
 
 ```cpp
-auto logger = spdlog::get("hex_logger");
-
 // 输出数组数据
 uint8_t data[] = {0x12, 0x34, 0x56, 0x78};
-logger->info("Array data: {}", spdlog::to_hex(data, data + sizeof(data)));
+SSLN_INFO("Array data: {}", quill::utility::to_hex(data, sizeof(data)));
 
 // 输出 vector 数据
 std::vector<uint8_t> vec_data = {0x9A, 0xBC, 0xDE, 0xF0};
-SPDLOG_LOGGER_INFO(logger, "Vector data: {}", spdlog::to_hex(vec_data));
+SSLN_INFO("Vector data: {}", quill::utility::to_hex(vec_data.data(), vec_data.size()));
 ```
 
 ### 性能计时
 
 ```cpp
-auto logger = spdlog::get("timer_logger");
-spdlog::stopwatch sw;
-
+quill::StopWatchTsc sw;  // 使用 TSC 计时器，更高精度
 // ... 执行一些操作 ...
+SSLN_INFO("Operation took {} seconds", sw);
 
-// 多种方式记录耗时
-logger->info("Operation took {} seconds", sw);
-SPDLOG_LOGGER_INFO(logger, "Operation took {} seconds", sw);
+// 支持不同时间单位
+auto ns = sw.elapsed_as<std::chrono::nanoseconds>();
+auto ms = sw.elapsed_as<std::chrono::milliseconds>();
 ```
 
-### 环境变量配置
+## 环境变量配置
 
-- `SSLN_LOG_LEVEL`: 设置日志级别 (trace, debug, info, warn, error, critical, off)
-- `SSLN_VERBOSITY`: 设置详细程度 (lite, low, medium, high, full, ultra)
+SSLogger 支持通过环境变量动态配置日志行为，无需修改代码：
+
+### 日志级别
+- `SSLN_LOG_LEVEL`: 设置全局日志级别
+  - 可选值: "trace", "debug", "info", "warn", "error", "critical", "off"
+  - 示例: `export SSLN_LOG_LEVEL=debug`
+
+### 输出格式
+- `SSLN_VERBOSITY`: 设置输出格式详细程度
+  - 可选值: "lite", "low", "medium", "high", "full", "ultra"
+  - 示例: `export SSLN_VERBOSITY=full`
+
+### 文件输出
 - `SSLN_LOG_DIR`: 设置日志文件目录
+  - 示例: `export SSLN_LOG_DIR=/var/log/myapp`
 - `SSLN_LOG_NAME`: 设置日志文件名
-- `SSLN_QUEUE_SIZE`: 设置异步模式队列大小（默认 8192）
-- `SSLN_THREADS`: 设置异步模式线程数（默认 1）
-- `SSLN_FLUSH_SECS`: 设置自动刷新间隔（秒）
+  - 示例: `export SSLN_LOG_NAME=app.log`
 
-## 性能基准
+### 文件轮转
+- `SSLN_MAX_FILE_SIZE`: 设置单个日志文件最大大小（字节）
+  - 示例: `export SSLN_MAX_FILE_SIZE=10485760`  # 10MB
+- `SSLN_MAX_FILES`: 设置最大保留文件数
+  - 示例: `export SSLN_MAX_FILES=5`
 
-使用提供的 benchmark 工具可以测试不同模式下的性能：
+### 优先级
+环境变量配置会覆盖代码中的默认设置。例如：
+```cpp
+// 代码中设置 Info 级别
+auto logger = ssln::SetupConsole(quill::LogLevel::Info);
 
-```bash
-./benchmarks
+// 如果设置了环境变量 SSLN_LOG_LEVEL=debug
+// 实际日志级别将是 Debug
 ```
-
-典型性能数据（百万消息测试）：
-- 同步模式：~50,000 消息/秒
-- 异步阻塞模式：~500,000 消息/秒
-- 异步覆盖模式：~1,700,000 消息/秒
 
 ## 编译要求
 
-- C++14 或更高版本
+- C++17 或更高版本
 - CMake 3.10 或更高版本
-- spdlog 库
+- quill 库
 
 ## 注意事项
 
 - 异步模式在程序异常退出时可能丢失最后一些消息
-- 异步覆盖模式在队列满时会丢弃旧消息
-- 建议在发布版本中使用 `SPDLOG_ACTIVE_LEVEL` 定义适当的日志级别
+- 建议在发布版本中使用 `QUILL_ACTIVE_LEVEL` 定义适当的日志级别
 - 文件日志需要确保目录存在且有写入权限
-- logger name 在全局必须唯一，重复的 name 会导致初始化失败
+- logger name 在全局必须唯一，重复的 name 会返回已存在的 logger
+- 环境变量的修改会影响所有新创建的 logger，但不会影响已存在的 logger
 
 ## 许可证
 

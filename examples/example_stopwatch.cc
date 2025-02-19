@@ -1,41 +1,71 @@
+#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 #include "ssln/sslogger.h"
+#include "ssln/sslogger_macros.h"
+#include "quill/StopWatch.h"
+#include <thread>
 
 void some_function() {
-    spdlog::stopwatch sw;
+    quill::StopWatchTsc sw;
     
-    // 做一些工作
+    // Do some work
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    spdlog::info("First operation took {}", sw);
+    SSLN_INFO("First operation took {:.6}s", sw);
     
-    // 继续其他工作
+    // Continue with more work
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    spdlog::info("Total time: {:.3}", sw);
+    SSLN_INFO("Total time: {:.3}s", sw);
     
-    // 重置计时器
+    // Reset the timer
     sw.reset();
     
-    // 新的计时开始
+    // Start new timing
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    spdlog::info("New operation took {}", sw);
+    SSLN_INFO("New operation took {:.6}s", sw);
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    SPDLOG_INFO("Detailed timing with source info: {:.3f} seconds", sw.elapsed().count());
+    SSLN_INFO("Detailed timing with source info: {} nanoseconds", sw.elapsed_as<std::chrono::nanoseconds>());
 }
 
 void another_function() {
-    spdlog::stopwatch sw;
-    // 使用自定义消息
-    spdlog::info("from some to another operation took {}", sw);
+    quill::StopWatchChrono sw;
+    // Use custom message
+    SSLN_INFO("From some to another operation took {:.6}s", sw);
     
-    // 做一些耗时操作...
+    // Do some time-consuming operation...
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    spdlog::info("another operation took {}", sw);
+    SSLN_INFO("Another operation took {:.6}s", sw);
 }
 
-int main(int argc, char const *argv[])
-{
-    spdlog::stopwatch sw;
+int main(int argc, char const *argv[]) {
+    // Initialize console logger with full verbosity to see source info
+    auto logger = ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kFull, "stopwatch_test");
+    ssln::set_default_logger(logger);
+
+    // Test both TSC and Chrono stopwatches
+    {
+        quill::StopWatchTsc sw;
+        SSLN_INFO("Begin TSC StopWatch");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        SSLN_INFO("After 1s, elapsed: {:.6}s", sw);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        SSLN_INFO("After 500ms, elapsed: {}s", sw);
+        SSLN_INFO("Elapsed nanoseconds: {}", sw.elapsed_as<std::chrono::nanoseconds>());
+        SSLN_INFO("Elapsed seconds: {}", sw.elapsed_as<std::chrono::seconds>());
+    }
+
+    {
+        quill::StopWatchChrono sw;
+        SSLN_INFO("Begin Chrono StopWatch");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        SSLN_INFO("After 1s, elapsed: {:.6}s", sw);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        SSLN_INFO("After 500ms, elapsed: {}s", sw);
+        SSLN_INFO("Elapsed nanoseconds: {}", sw.elapsed_as<std::chrono::nanoseconds>());
+        SSLN_INFO("Elapsed seconds: {}", sw.elapsed_as<std::chrono::seconds>());
+    }
+
+    // Test in different functions
     some_function();
     another_function();
-    spdlog::info("two operations took {:012.9} sec", sw);
+
     return 0;
 }

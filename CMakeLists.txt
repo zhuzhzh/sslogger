@@ -1,64 +1,63 @@
 cmake_minimum_required(VERSION 3.10)
-project(sslogger VERSION 1.0 LANGUAGES CXX)
+project(sslogger VERSION 1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 设置安装前缀
+# Set install prefix
 if(NOT CMAKE_INSTALL_PREFIX)
     set(CMAKE_INSTALL_PREFIX "/home/public/ssln")
 endif()
 
-list(APPEND CMAKE_PREFIX_PATH "/home/public/fmt" "/home/public/spdlog")
+list(APPEND CMAKE_PREFIX_PATH "/home/public/quill")
 
-# 查找依赖库
-find_package(fmt REQUIRED)
-find_package(spdlog REQUIRED)
+# Find dependencies
+find_package(quill REQUIRED)
 
-# 在 find_package 之后添加这些行
-if(NOT spdlog_FOUND)
-    message(FATAL_ERROR "spdlog not found")
-endif()
+# Source files
+set(SSLOGGER_SOURCES
+    src/sslogger.cpp
+)
 
-message(STATUS "spdlog include dir: ${spdlog_INCLUDE_DIRS}")
-message(STATUS "spdlog libraries: ${spdlog_LIBRARIES}")
+set(CMAKE_BUILD_TYPE Debug)
 
-# 创建 INTERFACE 库（header-only 库）
-add_library(sslogger INTERFACE)
+# Create library
+add_library(sslogger ${SSLOGGER_SOURCES})
 
-# 设置包含目录
-target_include_directories(sslogger 
-    INTERFACE
+# Set include directories
+target_include_directories(sslogger
+    PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
-# 链接依赖库
-target_link_libraries(sslogger 
-    INTERFACE 
-        fmt::fmt 
-        spdlog::spdlog
+# Link dependencies
+target_link_libraries(sslogger
+    PUBLIC
+        quill::quill
 )
 
-# 添加编译定义
+# Add compile definitions
 target_compile_definitions(sslogger 
-    INTERFACE
-        SPDLOG_FMT_EXTERNAL
-        SPDLOG_COMPILED_LIB
+    PUBLIC
+        QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_INFO
 )
 
-# 安装选项
+# Installation options
 option(BUILD_EXAMPLES "Build example programs" ON)
 
-# 安装头文件
+# Install headers
 install(DIRECTORY include/ssln
     DESTINATION include
     FILES_MATCHING PATTERN "*.h"
 )
 
-# 导出目标
+# Install library and export targets
 install(TARGETS sslogger
     EXPORT ssloggerTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
     INCLUDES DESTINATION include
 )
 
@@ -68,7 +67,7 @@ install(EXPORT ssloggerTargets
     DESTINATION lib/cmake/sslogger
 )
 
-# 创建配置文件
+# Create config files
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/ssloggerConfigVersion.cmake"
@@ -82,18 +81,18 @@ configure_package_config_file(
     INSTALL_DESTINATION lib/cmake/sslogger
 )
 
-# 安装配置文件
+# Install config files
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/ssloggerConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/ssloggerConfigVersion.cmake"
     DESTINATION lib/cmake/sslogger
 )
 
-# 添加示例程序
+# Add examples
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-# 启用测试
+# Enable testing
 enable_testing()
 add_subdirectory(tests)

@@ -3,24 +3,18 @@ add_executable(example_basic example_basic.cc)
 target_link_libraries(example_basic 
     PRIVATE 
         sslogger
-        spdlog::spdlog
-        fmt::fmt
 )
 
 add_executable(example_advanced example_advanced.cc)
 target_link_libraries(example_advanced 
     PRIVATE 
         sslogger
-        spdlog::spdlog
-        fmt::fmt
 )
 
 add_executable(example_stopwatch example_stopwatch.cc)
 target_link_libraries(example_stopwatch 
     PRIVATE 
         sslogger
-        spdlog::spdlog
-        fmt::fmt
 )
 
 # 添加运行时库搜索路径
@@ -45,3 +39,15 @@ target_include_directories(example_stopwatch
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include
 )
+
+# Set compile definitions for all examples
+foreach(target example_basic example_advanced example_stopwatch)
+    target_compile_definitions(${target}
+        PRIVATE
+            QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
+    )
+endforeach()
+
+# Install examples
+install(TARGETS example_basic example_advanced example_stopwatch
+    RUNTIME DESTINATION bin/examples)

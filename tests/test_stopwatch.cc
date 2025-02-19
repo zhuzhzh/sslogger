@@ -1,101 +1,100 @@
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
-// tests/test_stopwatch.cc
+#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 #include "ssln/sslogger.h"
+#include "ssln/sslogger_macros.h"
+#include "quill/StopWatch.h"
+#include "quill/Frontend.h"
 #include <gtest/gtest.h>
 #include <sstream>
 #include <thread>
 #include <regex>
-#include <spdlog/sinks/ostream_sink.h>
 
 class StopwatchTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_stream_ = std::make_shared<std::ostringstream>();
-        auto ostream_sink = std::make_shared<spdlog::sinks::ostream_sink_st>(*test_stream_);
-        auto logger = std::make_shared<spdlog::logger>("stopwatch_logger", ostream_sink);
-        logger->set_level(spdlog::level::debug);
-        logger->set_pattern("%v"); // Only message for easier testing
-        spdlog::set_default_logger(logger);
+        // Initialize console logger with minimal pattern for testing
+        logger = ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kLite, "stopwatch_test");
+        ssln::set_default_logger(logger);
     }
 
     void TearDown() override {
-        spdlog::drop_all();
+        auto loggers = quill::Frontend::get_all_loggers();
+        for (auto& logger : loggers) {
+            quill::Frontend::remove_logger(logger);
+        }
+        ssln::default_logger = nullptr;
     }
 
     // Helper function to check if elapsed time is within expected range
-    void CheckElapsedTime(const std::string& output, double expected_ms, double tolerance_ms = 20) {
-        std::regex time_pattern(R"([\d.]+)");
-        std::smatch matches;
-        ASSERT_TRUE(std::regex_search(output, matches, time_pattern)) 
-            << "No time value found in output: " << output;
-
-        double actual_ms = std::stod(matches[0]) * 1000; // Convert to milliseconds
+    void CheckElapsedTime(const std::chrono::nanoseconds& elapsed, 
+                         double expected_ms, double tolerance_ms = 20) {
+        double actual_ms = std::chrono::duration<double, std::milli>(elapsed).count();
         EXPECT_NEAR(actual_ms, expected_ms, tolerance_ms)
             << "Time measurement outside tolerance range.\n"
             << "Expected: " << expected_ms << "ms ± " << tolerance_ms << "ms\n"
-            << "Actual: " << actual_ms << "ms\n"
-            << "Full output: " << output;
+            << "Actual: " << actual_ms << "ms\n";
     }
 
-    std::shared_ptr<std::ostringstream> test_stream_;
+    quill::Logger* logger;
 };
 
-TEST_F(StopwatchTest, BasicMeasurement) {
-    spdlog::stopwatch sw;
+TEST_F(StopwatchTest, TscBasicMeasurement) {
+    quill::StopWatchTsc sw;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
-    // Basic elapsed time
-    test_stream_->str(""); // Clear previous output
-    spdlog::info("Elapsed time: {}", sw);
-    CheckElapsedTime(test_stream_->str(), 100);
+    auto elapsed = sw.elapsed_as<std::chrono::nanoseconds>();
+    CheckElapsedTime(elapsed, 100);
 }
 
-TEST_F(StopwatchTest, FormattedOutput) {
-    spdlog::stopwatch sw;
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+TEST_F(StopwatchTest, ChronoBasicMeasurement) {
+    quill::StopWatchChrono sw;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
-    // Check formatted output with 3 decimal places
-    test_stream_->str("");
-    spdlog::info("Formatted time: {:.3}", sw);
-    std::string output = test_stream_->str();
-    
-    // Verify format has exactly 3 decimal places
-    std::regex format_pattern(R"(\d+\.\d{3})");
-    EXPECT_TRUE(std::regex_search(output, format_pattern)) 
-        << "Output doesn't match expected format (X.XXX): " << output;
-    
-    CheckElapsedTime(output, 50);
+    auto elapsed = sw.elapsed_as<std::chrono::nanoseconds>();
+    CheckElapsedTime(elapsed, 100);
 }
 
-TEST_F(StopwatchTest, MultipleIntervals) {
-    spdlog::stopwatch sw;
+TEST_F(StopwatchTest, TscMultipleIntervals) {
+    quill::StopWatchTsc sw;
     
     // First interval
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    test_stream_->str("");
-    spdlog::info("First interval: {}", sw);
-    CheckElapsedTime(test_stream_->str(), 50);
+    auto first = sw.elapsed_as<std::chrono::nanoseconds>();
+    CheckElapsedTime(first, 50);
     
     // Second interval
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    test_stream_->str("");
-    spdlog::info("Second interval: {}", sw);
-    CheckElapsedTime(test_stream_->str(), 100);
+    auto second = sw.elapsed_as<std::chrono::nanoseconds>();
+    CheckElapsedTime(second, 100);
 }
 
-TEST_F(StopwatchTest, ElapsedCount) {
-    spdlog::stopwatch sw;
+TEST_F(StopwatchTest, ChronoReset) {
+    quill::StopWatchChrono sw;
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
-    test_stream_->str("");
-    SPDLOG_INFO("Elapsed seconds: {} seconds", sw.elapsed().count());
+    sw.reset();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     
-    std::string output = test_stream_->str();
-    CheckElapsedTime(output, 100);
+    auto elapsed = sw.elapsed_as<std::chrono::nanoseconds>();
+    CheckElapsedTime(elapsed, 50);
+}
+
+TEST_F(StopwatchTest, DifferentUnits) {
+    quill::StopWatchTsc sw;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     
-    // Verify "seconds" unit is present
-    EXPECT_TRUE(output.find("seconds") != std::string::npos) 
-        << "Output missing 'seconds' unit: " << output;
+    // Check seconds
+    auto sec = sw.elapsed_as<std::chrono::seconds>();
+    EXPECT_EQ(sec.count(), 1);
+    
+    // Check milliseconds
+    auto ms = sw.elapsed_as<std::chrono::milliseconds>();
+    EXPECT_GE(ms.count(), 1500);
+    EXPECT_LT(ms.count(), 1600);  // Allow some tolerance
+    
+    // Check microseconds
+    auto us = sw.elapsed_as<std::chrono::microseconds>();
+    EXPECT_GE(us.count(), 1500000);
+    EXPECT_LT(us.count(), 1600000);
 }
 
 int main(int argc, char *argv[]) {

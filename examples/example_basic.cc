@@ -1,17 +1,48 @@
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_INFO
+#include "ssln/sslogger_macros.h"
 #include "ssln/sslogger.h"
+#include "quill/LogMacros.h"
 
 int main() {
 
-    SPDLOG_DEBUG("debug message");
-    SPDLOG_CRITICAL("critical message");
-    SPDLOG_TRACE("trace message");
-    SPDLOG_INFO("info message");
-    SPDLOG_WARN("warning message");
-    SPDLOG_ERROR("error message");
+    ssln::SetupFile("log/basic.log", 
+    quill::LogLevel::Info, 
+    ssln::Verbose::kLite, 
+    "example_basic");
 
-    spdlog::set_level(spdlog::level::debug);
-    spdlog::debug("this debug will show");
-    spdlog::trace("this trace will not show");
+    quill::Logger* basic_logger = ssln::get_logger("example_basic");
+    ssln::set_default_logger(basic_logger);
+
+    SSLN_TRACE_L3("trace L3 message - not shown");
+    SSLN_TRACE_L2("trace L2 message - not shown");
+    SSLN_TRACE_L1("trace L1 message - not shown");
+    SSLN_DEBUG("debug message - not shown");
+    SSLN_INFO("info message - shown");
+    SSLN_WARNING("warning message - shown");
+    SSLN_ERROR("error message - shown");
+
+    basic_logger->set_log_level(quill::LogLevel::TraceL3);
+    SSLN_TRACE_L3("trace L3 message2 - shown");
+    SSLN_TRACE_L2("trace L2 message2 - shown");
+    SSLN_TRACE_L1("trace L1 message2 - shown");
+    SSLN_DEBUG("debug message2 - shown");
+
+    ssln::SetupConsole(quill::LogLevel::Info);
+    ssln::set_default_logger(ssln::console_logger);
+
+    SSLN_TRACE_L3("trace L3 message - not shown");
+    SSLN_TRACE_L2("trace L2 message - not shown");
+    SSLN_TRACE_L1("trace L1 message - not shown");
+    SSLN_DEBUG("debug message - not shown");
+    SSLN_INFO("info message - shown");
+    SSLN_WARNING("warning message - shown");
+    SSLN_ERROR("error message - shown");
+
+    ssln::console_logger->set_log_level(quill::LogLevel::TraceL3);
+
+    SSLN_TRACE_L3("trace L3 message - shown");
+    SSLN_TRACE_L2("trace L2 message - shown");
+    SSLN_TRACE_L1("trace L1 message - shown");
+    SSLN_DEBUG("debug message - shown");
+
     return 0;
 }

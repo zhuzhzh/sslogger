@@ -1,31 +1,22 @@
+#include "ssln/sslogger_macros.h"
 #include "ssln/sslogger.h"
+#include "quill/LogMacros.h"
 
 int main() {
 
     // 同步文件日志
-    ssln::InitSyncFile("logs", "sync.log", spdlog::level::debug, ssln::Verbose::kFull, "sync_logger");
-    SPDLOG_INFO("Sync file logging");
+    ssln::SetupConsole();
+    SSLN_INFO("console info");
 
-    // 异步文件日志
-    ssln::InitAsyncFile("logs", "async.log", spdlog::level::debug, ssln::Verbose::kUltra, "async_logger");
-    auto async_logger = spdlog::get("async_logger");
-    spdlog::set_default_logger(async_logger);
-    SPDLOG_INFO("Async file logging");
-
-    ssln::InitAsyncFile("logs", "async2.log", spdlog::level::debug, ssln::Verbose::kHigh, "async_logger2");
-    auto async2_logger = spdlog::get("async_logger2");
-    spdlog::set_default_logger(async2_logger);
-    SPDLOG_INFO("Async file2 logging");
+    auto file_logger = ssln::SetupFile("log/normal.log", quill::LogLevel::TraceL1, ssln::Verbose::kMedium, "file_logger");
+    SSLN_LOG_DEBUG(file_logger,"file Debug");
 
     // Rotating文件日志 (最大10MB，保留5个文件)
-    ssln::InitRotatingFile("logs", "rotate.log", 
-        10 * 1024 * 1024, 5, spdlog::level::debug, ssln::Verbose::kLite);
-    auto rotating_logger = spdlog::get("rotating_logger");
-    spdlog::set_default_logger(rotating_logger);
-    SPDLOG_INFO("Rotating file logging");
+    auto rotate_logger = ssln::SetupRotatingFile("log/rotate.log",
+        1 * 1024 * 1024, 5, quill::LogLevel::Debug, ssln::Verbose::kUltra);
+    SSLN_LOG_INFO(rotate_logger, "Rotating info");
+    SSLN_LOG_DEBUG(rotate_logger, "Rotating debug");
 
-    spdlog::set_default_logger(async_logger);
-    SPDLOG_INFO("Async file logging again");
     
     return 0;
 }

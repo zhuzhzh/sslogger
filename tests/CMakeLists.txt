@@ -1,40 +1,57 @@
-list(APPEND CMAKE_PREFIX_PATH "/home/public/fmt" "/home/public/spdlog" "/home/public/googletest" "/home/public/ssln")
+# Add path to find packages
+list(APPEND CMAKE_PREFIX_PATH "/home/public/quill" "/home/public/googletest")
 
-# 查找 GTest 包
+# Find required packages
 find_package(GTest REQUIRED)
+find_package(quill REQUIRED)
 
-# 包含 Google Test 的头文件
-include_directories(${GTEST_INCLUDE_DIRS})
-
-# 获取所有测试文件
-file(GLOB_RECURSE TEST_SOURCES "test_*.cc")
-
-# 为每个测试文件创建一个可执行文件
-foreach(TEST_FILE ${TEST_SOURCES})
-    # 获取文件名（不包含扩展名）作为测试名
-    get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
-    
-    # 添加可执行文件
-    add_executable(${TEST_NAME} ${TEST_FILE})
-    
-    # 链接 Google Test 和您的日志库
-    target_link_libraries(${TEST_NAME} 
-        PRIVATE 
-        GTest::GTest 
-        GTest::Main
-        sslogger
-    )
-    
-    # 将测试添加到 CTest
-    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-endforeach()
-
-# 可选：设置一些通用的编译选项
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Set build type
 set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
 
-# 可选：为所有测试添加包含目录
-include_directories(${CMAKE_SOURCE_DIR}/include)
+# Test sources
+set(TEST_SOURCES
+    test_basic.cc
+    test_hex_logging.cc
+    test_stopwatch.cc
+    test_verbosity.cc
+    test_env.cc
+)
+
+# Add test executables
+foreach(test_source ${TEST_SOURCES})
+    # Get the test name without extension
+    get_filename_component(test_name ${test_source} NAME_WE)
+    
+    # Add executable if it doesn't exist
+    if(NOT TARGET ${test_name})
+        add_executable(${test_name} ${test_source})
+        
+        # Link with sslogger and GTest
+        target_link_libraries(${test_name}
+            PRIVATE
+                sslogger
+                GTest::GTest
+                GTest::Main
+        )
+        
+        # Set compile definitions for tests
+        target_compile_definitions(${test_name}
+            PRIVATE
+                QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
+        )
+        
+        # Add test to CTest
+        add_test(
+            NAME ${test_name}
+            COMMAND ${test_name}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        )
+    endif()
+endforeach()
+
+# Create test logs directory
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/logs)
