@@ -44,5 +44,9 @@ int main() {
     SSLN_TRACE_L1("trace L1 message - shown");
     SSLN_DEBUG("debug message - shown");
 
+    SSLN_LOG_DEBUG(ssln::console_logger, "{:>30}", "abcdefg");
+    SSLN_LOG_DEBUG(ssln::console_logger, "{:#04x}", 48);
+    SSLN_LOG_DEBUG(ssln::console_logger, "{:.2f}", 48.0);
+
     return 0;
 }

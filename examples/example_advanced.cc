@@ -30,6 +30,8 @@ int main() {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
     };
     SSLN_INFO("Vector data: {}", quill::utility::to_hex(vec_data.data(), vec_data.size()));
+    SSLN_INFO("Vector data: {}", vec_data);
+    SSLN_INFO("Vector data: {::#06x}", vec_data);
 
     // Partial data
     auto first_four = std::vector<uint8_t>(vec_data.begin(), vec_data.begin() + 4);
