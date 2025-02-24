@@ -1,7 +1,5 @@
-#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 // tests/test_verbosity.cc
 #include "ssln/sslogger.h"
-#include "ssln/sslogger_macros.h"
 
 // C++ standard library headers
 #include <fstream>
@@ -20,22 +18,13 @@ class VerbosityTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Initialize backend
-        ssln::InitBackend();
     }
 
     void TearDown() override {
-        auto loggers = quill::Frontend::get_all_loggers();
-        for (auto& logger : loggers) {
-            quill::Frontend::remove_logger(logger);
-        }
-        while(quill::Frontend::get_number_of_loggers() != 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        ssln::default_logger = nullptr;
     }
 
     void CreateLogger(ssln::Verbose verbosity, const std::string& name) {
-        logger = ssln::SetupConsole(quill::LogLevel::Debug, verbosity, name);
+        logger = ssln::SetupConsoleLogger(name, verbosity, quill::LogLevel::Debug);
         ssln::set_default_logger(logger);
     }
 
@@ -58,13 +47,13 @@ protected:
 
 TEST_F(VerbosityTest, LiteVerbosity) {
     CreateLogger(ssln::Verbose::kLite, "lite_logger");
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kLite);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kLite);
     CheckBasicFormat(pattern, false);
 }
 
 TEST_F(VerbosityTest, LowVerbosity) {
     CreateLogger(ssln::Verbose::kLow, "low_logger");
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kLow);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kLow);
     CheckBasicFormat(pattern, true);
     EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(time\\)")))
         << "Low format missing time: " << pattern;
@@ -72,7 +61,7 @@ TEST_F(VerbosityTest, LowVerbosity) {
 
 TEST_F(VerbosityTest, MediumVerbosity) {
     CreateLogger(ssln::Verbose::kMedium, "medium_logger");
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kMedium);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kMedium);
     CheckBasicFormat(pattern, true);
     EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(log_level\\)")))
         << "Medium format missing level: " << pattern;
@@ -80,7 +69,7 @@ TEST_F(VerbosityTest, MediumVerbosity) {
 
 TEST_F(VerbosityTest, HighVerbosity) {
     CreateLogger(ssln::Verbose::kHigh, "high_logger");
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kHigh);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kHigh);
     CheckBasicFormat(pattern, true);
     EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(thread_id\\)")))
         << "High format missing thread id: " << pattern;
@@ -88,7 +77,7 @@ TEST_F(VerbosityTest, HighVerbosity) {
 
 TEST_F(VerbosityTest, FullVerbosity) {
     CreateLogger(ssln::Verbose::kFull, "full_logger");
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kFull);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kFull);
     CheckBasicFormat(pattern, true);
     EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(caller_function\\)")))
         << "Full format missing function name: " << pattern;
@@ -96,7 +85,7 @@ TEST_F(VerbosityTest, FullVerbosity) {
 
 TEST_F(VerbosityTest, UltraVerbosity) {
     CreateLogger(ssln::Verbose::kUltra, "ultra_logger");
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kUltra);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kUltra);
     CheckBasicFormat(pattern, true);
     EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(time\\)")))
         << "Ultra format missing high precision time: " << pattern;

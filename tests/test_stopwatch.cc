@@ -1,6 +1,4 @@
-#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 #include "ssln/sslogger.h"
-#include "ssln/sslogger_macros.h"
 #include "quill/StopWatch.h"
 #include "quill/Frontend.h"
 #include <gtest/gtest.h>
@@ -12,8 +10,7 @@ class StopwatchTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Initialize console logger with minimal pattern for testing
-        logger = ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kLite, "stopwatch_test");
-        ssln::set_default_logger(logger);
+        ssln::set_default_logger(ssln::hybrid_logger);
     }
 
     void TearDown() override {

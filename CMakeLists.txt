@@ -16,7 +16,7 @@ find_package(quill REQUIRED)
 
 # Source files
 set(SSLOGGER_SOURCES
-    src/sslogger.cpp
+    src/sslogger.cc
 )
 
 set(CMAKE_BUILD_TYPE Debug)
@@ -40,7 +40,7 @@ target_link_libraries(sslogger
 # Add compile definitions
 target_compile_definitions(sslogger 
     PUBLIC
-        QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_INFO
+    QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 )
 
 # Installation options

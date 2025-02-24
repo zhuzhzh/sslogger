@@ -1,7 +1,5 @@
-#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 #include "ssln/sslogger.h"
 #include "./tlm_payload_format.h"
-#include "ssln/sslogger_macros.h"
 #include "quill/std/Vector.h"
 #include "quill/std/Pair.h"
 #include "quill/std/Array.h"
@@ -11,8 +9,7 @@
 
 int main() {
     // Initialize console logger
-    auto logger = ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kFull, "console");
-    ssln::set_default_logger(logger);
+    ssln::set_default_logger(ssln::console_logger);
 
     // Basic logging test
     int i = 999;
@@ -78,10 +75,7 @@ int main() {
     SSLN_INFO("Large data with source info: {}", quill::utility::to_hex(large_data, sizeof(large_data)));
 
     // Switch to file logger
-    auto file_logger = ssln::SetupFile("log/advanced.log", 
-        quill::LogLevel::Info, ssln::Verbose::kFull, "file_logger");
-    
-    ssln::set_default_logger(file_logger);
+    ssln::set_default_logger(ssln::hybrid_logger);
 
     // Log hex data to file
     SSLN_DEBUG("Hex data in file: {:#x}", vec_data);
@@ -89,20 +83,14 @@ int main() {
     // Compile-time log level test
     SSLN_DEBUG("Debug message at compile time");
     SSLN_INFO("Info message at compile time");
-    SSLN_LOG_INFO(file_logger, "this is the full message with source information");
+    SSLN_LOG_INFO(ssln::hybrid_logger, "this is the full message with source information");
 
     // Using different verbosity levels
     std::vector<uint8_t> small_data = {0x12, 0x34, 0x56, 0x78};
     
-    // Lite format
-    auto lite_logger = ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kLite, "console2");
-    ssln::set_default_logger(lite_logger);
+    ssln::set_default_logger(ssln::console_logger);
     SSLN_INFO("Small data (lite): {}", quill::utility::to_hex(small_data.data(), small_data.size()));
 
-    // Full format
-    auto full_logger = ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kFull, "console3");
-    ssln::set_default_logger(full_logger);
-    SSLN_INFO("Small data (full): {}", quill::utility::to_hex(small_data.data(), small_data.size()));
 
     return 0;
 }

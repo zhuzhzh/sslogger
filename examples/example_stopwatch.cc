@@ -1,6 +1,4 @@
-#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 #include "ssln/sslogger.h"
-#include "ssln/sslogger_macros.h"
 #include "quill/StopWatch.h"
 #include <thread>
 
@@ -37,8 +35,7 @@ void another_function() {
 
 int main(int argc, char const *argv[]) {
     // Initialize console logger with full verbosity to see source info
-    auto logger = ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kFull, "stopwatch_test");
-    ssln::set_default_logger(logger);
+    ssln::set_default_logger(ssln::console_logger);
 
     // Test both TSC and Chrono stopwatches
     {

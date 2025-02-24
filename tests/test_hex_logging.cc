@@ -1,7 +1,5 @@
-#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 // tests/test_hex_logging.cc
 #include "ssln/sslogger.h"
-#include "ssln/sslogger_macros.h"
 
 // C++ standard library headers
 #include <fstream>
@@ -21,23 +19,11 @@ class HexLoggingTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Initialize console logger with minimal pattern for testing
-        logger = ssln::SetupConsole(quill::LogLevel::Debug, ssln::Verbose::kLite);
-        ASSERT_TRUE(logger != nullptr) << "Failed to create logger";
-        ssln::set_default_logger(logger);
+        ssln::set_default_logger(ssln::hybrid_logger);
+        logger = ssln::hybrid_logger;
     }
 
     void TearDown() override {
-        if (logger) {
-            logger->flush_log();
-        
-        size_t const total_loggers = quill::Frontend::get_number_of_loggers();
-        quill::Frontend::remove_logger(logger);
-        while(quill::Frontend::get_number_of_loggers()!=(total_loggers-1)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        ssln::default_logger = nullptr;
-        logger = nullptr;
-        }
     }
 
     // Helper function to check if string contains expected hex pattern
@@ -57,8 +43,8 @@ protected:
         
         return clean_hex.find(clean_expected) != std::string::npos;
     }
-
     quill::Logger* logger;
+
 };
 
 TEST_F(HexLoggingTest, ArrayHexLogging) {

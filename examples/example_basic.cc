@@ -1,15 +1,9 @@
-#include "ssln/sslogger_macros.h"
 #include "ssln/sslogger.h"
 #include "quill/LogMacros.h"
 
 int main() {
 
-    ssln::SetupFile("log/basic.log", 
-    quill::LogLevel::Info, 
-    ssln::Verbose::kLite, 
-    "example_basic");
-
-    quill::Logger* basic_logger = ssln::get_logger("example_basic");
+    quill::Logger* basic_logger = ssln::get_logger("axi_master");
     ssln::set_default_logger(basic_logger);
 
     SSLN_TRACE_L3("trace L3 message - not shown");
@@ -26,7 +20,6 @@ int main() {
     SSLN_TRACE_L1("trace L1 message2 - shown");
     SSLN_DEBUG("debug message2 - shown");
 
-    ssln::SetupConsole(quill::LogLevel::Info);
     ssln::set_default_logger(ssln::console_logger);
 
     SSLN_TRACE_L3("trace L3 message - not shown");

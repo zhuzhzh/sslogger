@@ -39,10 +39,10 @@ foreach(test_source ${TEST_SOURCES})
         )
         
         # Set compile definitions for tests
-        target_compile_definitions(${test_name}
-            PRIVATE
-                QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
-        )
+        #target_compile_definitions(${test_name}
+        #    PRIVATE
+        #        QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
+        #)
         
         # Add test to CTest
         add_test(

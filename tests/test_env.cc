@@ -1,7 +1,5 @@
-#define QUILL_COMPILE_ACTIVE_LOG_LEVEL QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3
 // tests/test_env.cc
 #include "ssln/sslogger.h"
-#include "ssln/sslogger_macros.h"
 
 // C++ standard library headers
 #include <fstream>
@@ -98,7 +96,7 @@ TEST_F(EnvTest, LogLevelEnv) {
     setenv("SSLN_LOG_LEVEL", "error", 1);
 #endif
 
-    auto logger = ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kLite, "env_level_test");
+    auto logger = ssln::SetupConsoleLogger("env_level_test", ssln::Verbose::kLite, quill::LogLevel::Info);
     ASSERT_TRUE(logger != nullptr);
     EXPECT_EQ(logger->get_log_level(), quill::LogLevel::Error);
 
@@ -115,10 +113,10 @@ TEST_F(EnvTest, VerbosityEnv) {
     setenv("SSLN_VERBOSITY", "full", 1);
 #endif
 
-    auto logger = ssln::SetupConsole(quill::LogLevel::Info, ssln::Verbose::kLite, "env_verbose_test");
+    auto logger = ssln::SetupConsoleLogger("env_verbose_test", ssln::Verbose::kFull, quill::LogLevel::Info);
     ASSERT_TRUE(logger != nullptr);
     
-    std::string pattern = ssln::detail::GetPattern(ssln::Verbose::kFull);
+    std::string pattern = ssln::GetPattern(ssln::Verbose::kFull);
     EXPECT_TRUE(std::regex_search(pattern, std::regex("%\\(caller_function\\)")))
         << "Full format missing function name: " << pattern;
 }
@@ -135,8 +133,8 @@ TEST_F(EnvTest, LogFilePathEnv) {
     // Create test directory
     std::filesystem::create_directories("test_logs");
 
-    auto logger = ssln::SetupFile("default.log", quill::LogLevel::Info,
-                               ssln::Verbose::kLite, "env_file_test");
+    auto logger = ssln::SetupFileLogger("default.log", "env_file_test", 
+                               ssln::Verbose::kLite, quill::LogLevel::Info);
     ASSERT_TRUE(logger != nullptr);
 
     SSLN_LOG_INFO(logger, "Test message");
