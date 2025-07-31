@@ -147,16 +147,21 @@ namespace detail {
     }
 
    // 封装的 Logger 创建函数
-  quill::Logger* SetupFileLogger(const char* log_file, const std::string& logger_name, 
-                                        Verbose verbose, 
-                                        quill::LogLevel level){ 
+  quill::Logger* SetupFileLogger(const char* log_file, const std::string& logger_name,
+                                        Verbose verbose,
+                                        quill::LogLevel level,
+                                        bool append_to_file,
+                                        bool append_date){
     std::string file_path = GetLogFilePath(log_file);
     detail::SetLoggerFilePath(logger_name, file_path);
     quill::FileSinkConfig file_cfg;
-    std::string append_date = GetEnvOr("SSLN_LOGNAME_APPDATE", "false");
-    bool is_append_date = (append_date == "true" || append_date == "1");
-    std::string open_mode = GetEnvOr("SSLN_LOG_APPEND", "false");
-    bool is_append = (open_mode == "true" || open_mode == "1");
+
+    const char* env_append_date = std::getenv("SSLN_LOGNAME_APPDATE");
+    bool is_append_date = env_append_date ? (strcmp(env_append_date, "true") == 0 || strcmp(env_append_date, "1") == 0) : append_date;
+    
+    const char* env_open_mode = std::getenv("SSLN_LOG_APPEND");
+    bool is_append = env_open_mode ? (strcmp(env_open_mode, "true") == 0 || strcmp(env_open_mode, "1") == 0) : append_to_file;
+
     file_cfg.set_open_mode(is_append? 'a':'w');
     file_cfg.set_filename_append_option(is_append_date ? quill::FilenameAppendOption::StartDateTime : quill::FilenameAppendOption::None);
     auto file_sink = quill::Frontend::create_or_get_sink<quill::FileSink>(file_path, file_cfg);
