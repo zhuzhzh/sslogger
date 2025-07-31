@@ -8,7 +8,7 @@ int main() {
     ssln::set_default_logger("console_logger");
     SSLN_INFO("console info");
 
-    auto file_logger = ssln::SetupFileLogger("log/normal.log", "file_logger", ssln::Verbose::kMedium, quill::LogLevel::Debug, true);
+    auto file_logger = ssln::SetupFileLogger("log/normal.log", "file_logger", ssln::Verbose::kMedium, quill::LogLevel::Debug);
     SSLN_LOG_DEBUG(file_logger,"file Debug");
 
     // Rotating文件日志 (最大10MB，保留5个文件)

@@ -1,5 +1,5 @@
 # Add path to find packages
-list(APPEND CMAKE_PREFIX_PATH "/home/public/quill" "/home/public/googletest")
+list(APPEND CMAKE_PREFIX_PATH "/home/public/quill" "/home/public/gtest")
 
 # Find required packages
 find_package(GTest REQUIRED)

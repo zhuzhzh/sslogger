@@ -77,7 +77,9 @@ namespace detail {
       const char* level = std::getenv("SSLN_LOG_LEVEL");
       if (!level) return default_level;
       std::string level_str = level;
-      if (level_str == "trace") return quill::LogLevel::TraceL3;
+      if (level_str == "trace3") return quill::LogLevel::TraceL3;
+      if (level_str == "trace2") return quill::LogLevel::TraceL2;
+      if (level_str == "trace1") return quill::LogLevel::TraceL1;
       if (level_str == "debug") return quill::LogLevel::Debug;
       if (level_str == "info")  return quill::LogLevel::Info;
       if (level_str == "warn")  return quill::LogLevel::Warning;
@@ -136,19 +138,30 @@ namespace detail {
       };
     }
 
-  // 封装的 Logger 创建函数
+    static quill::ClockSourceType GetClockSourceFromEnv() {
+      const char* use_rdtsc = std::getenv("SSLN_LOG_RDTSC");
+      if (use_rdtsc && (strcmp(use_rdtsc, "1") == 0 || strcmp(use_rdtsc, "true") == 0)) {
+        return quill::ClockSourceType::Tsc;
+      }
+      return quill::ClockSourceType::System;
+    }
+
+   // 封装的 Logger 创建函数
   quill::Logger* SetupFileLogger(const char* log_file, const std::string& logger_name, 
                                         Verbose verbose, 
-                                        quill::LogLevel level, 
-                                        bool append_date){ 
+                                        quill::LogLevel level){ 
     std::string file_path = GetLogFilePath(log_file);
     detail::SetLoggerFilePath(logger_name, file_path);
     quill::FileSinkConfig file_cfg;
-    file_cfg.set_open_mode('w');
-    file_cfg.set_filename_append_option(append_date ? quill::FilenameAppendOption::StartDateTime : quill::FilenameAppendOption::None);
+    std::string append_date = GetEnvOr("SSLN_LOGNAME_APPDATE", "false");
+    bool is_append_date = (append_date == "true" || append_date == "1");
+    std::string open_mode = GetEnvOr("SSLN_LOG_APPEND", "false");
+    bool is_append = (open_mode == "true" || open_mode == "1");
+    file_cfg.set_open_mode(is_append? 'a':'w');
+    file_cfg.set_filename_append_option(is_append_date ? quill::FilenameAppendOption::StartDateTime : quill::FilenameAppendOption::None);
     auto file_sink = quill::Frontend::create_or_get_sink<quill::FileSink>(file_path, file_cfg);
     auto logger = quill::Frontend::create_or_get_logger(
-        logger_name, std::move(file_sink), GetFormatterOptions(verbose));
+        logger_name, std::move(file_sink), GetFormatterOptions(verbose), GetClockSourceFromEnv());
     logger->set_log_level(GetLevelFromEnv(level));
     return logger;
   }
@@ -158,7 +171,7 @@ namespace detail {
                                           quill::LogLevel level) {
     auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>("console_sink");
     auto logger = quill::Frontend::create_or_get_logger(
-        logger_name, std::move(console_sink), GetFormatterOptions(verbose));
+        logger_name, std::move(console_sink), GetFormatterOptions(verbose), GetClockSourceFromEnv());
     logger->set_log_level(GetLevelFromEnv(level));
     return logger;
   }
@@ -177,7 +190,7 @@ namespace detail {
     auto rotating_sink = quill::Frontend::create_or_get_sink<quill::RotatingFileSink>(
         file_path, rotating_cfg);
     auto logger = quill::Frontend::create_or_get_logger(
-        logger_name, std::move(rotating_sink), GetFormatterOptions(verbose));
+        logger_name, std::move(rotating_sink), GetFormatterOptions(verbose), GetClockSourceFromEnv());
     logger->set_log_level(GetLevelFromEnv(level));
     return logger;
   }
@@ -198,7 +211,7 @@ namespace detail {
           quill::FileEventNotifier{});
 
       auto logger = quill::Frontend::create_or_get_logger(
-          logger_name, std::move(perf_sink), quill::PatternFormatterOptions{"%(message)"});
+          logger_name, std::move(perf_sink), quill::PatternFormatterOptions{"%(message)"}, GetClockSourceFromEnv());
       logger->set_log_level(GetLevelFromEnv(level));
 
       if (logger_name == "perf_logger") {

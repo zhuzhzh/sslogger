@@ -79,8 +79,7 @@ quill::Logger* SetupConsoleLogger(const std::string& logger_name,
 
 quill::Logger* SetupFileLogger(const char* log_file, const std::string& logger_name, 
                                 Verbose verbose = Verbose::kMedium, 
-                                quill::LogLevel level = quill::LogLevel::Info, 
-                                bool append_date = false);
+                                quill::LogLevel level = quill::LogLevel::Info); 
 
 quill::Logger* SetupRotatingLogger(const char* log_file, size_t max_file_size, size_t max_files,
                                     const std::string& logger_name, 
