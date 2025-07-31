@@ -3,7 +3,7 @@
 
 int main() {
 
-    quill::Logger* basic_logger = ssln::get_logger("axi_master");
+    quill::Logger* basic_logger = ssln::get_logger("axi_master_logger");
     ssln::set_default_logger(basic_logger);
 
     SSLN_TRACE_L3("trace L3 message - not shown");
