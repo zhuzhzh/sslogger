@@ -236,7 +236,7 @@ namespace detail {
       axi_slave_logger = SetupFileLogger("axi_slave.log", "axi_slave_logger");
       perf_logger = SetupPerfLogger("perf.log", "perf_logger");
       console_logger = SetupConsoleLogger("console_logger");
-      daily_logger = SetupRotatingLogger("daily.log", 1024 * 1024 * 10, 5, "daily_logger");
+      //daily_logger = SetupRotatingLogger("daily.log", 1024 * 1024 * 10, 5, "daily_logger");
 
       // 设置默认 Logger
       default_logger = hybrid_logger; // 默认使用hybrid_logger
